@@ -69,7 +69,10 @@ function EntityService:_updateEntity(entity, deltaTime)
 		if entity:CanAttack() then
 			local distance = (targetCharacter.RootPart.Position - entity:GetPosition()).Magnitude
 			if distance <= entity.AttackRange then
-				targetCharacter:ApplyDamage(entity.Damage)
+				local didDamage = targetCharacter:ApplyDamage(entity.Damage)
+				if didDamage then
+					targetCharacter:ApplyTemporarySpeedMultiplier(1.45, 1.5)
+				end
 				entity:MarkAttack()
 
 				local player = targetCharacter.Player

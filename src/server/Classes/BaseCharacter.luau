@@ -14,19 +14,61 @@ function BaseCharacter.new(player, model)
 	self.DefaultJumpPower = self.Humanoid.JumpPower
 	self.IsInvincible = false
 	
+	self.SpeedMultiplier = 1
+	self.SpeedModifierToken = 0
+	
 	return self
+end
+
+function BaseCharacter:_refreshMovement()
+	if not self.Humanoid then
+		return
+	end
+	
+	if self.IsFrozen then
+		self.Humanoid.WalkSpeed = 0
+		self.Humanoid.JumpPower = 0
+		self.Humanoid.AutoRotate = false
+		return
+	end
+	
+	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * self.SpeedMultiplier
+	self.Humanoid.JumpPower = self.DefaultJumpPower
+	self.Humanoid.AutoRotate = true
 end
 
 function BaseCharacter:SetWalkSpeed(speed)
 	if self.Humanoid then
-		self.Humanoid.WalkSpeed = speed
+		self.DefaultWalkSpeed = speed
+		self:_refreshMovement()
 	end
 end
 
 function BaseCharacter:SetJumpPower(jumpPower)
 	if self.Humanoid then
-		self.Humanoid.JumpPower = jumpPower
+		self.DefaultJumpPower = jumpPower
+		self:_refreshMovement()
 	end
+end
+
+function BaseCharacter:SetSpeedMultiplier(multiplier)
+	self.SpeedMultiplier = multiplier or 1
+	self:_refreshMovement()
+end
+
+function BaseCharacter:ApplyTemporarySpeedMultiplier(multiplier, duration)
+	self.SpeedModifierToken += 1
+	local token = self.SpeedModifierToken
+	
+	self:SetSpeedMultiplier(multiplier)
+	
+	task.delay(duration, function()
+		if self.SpeedModifierToken ~= token then
+			return
+		end
+		
+		self:SetSpeedMultiplier(1)
+	end)
 end
 
 function BaseCharacter:Freeze()
@@ -35,9 +77,7 @@ function BaseCharacter:Freeze()
 	end
 	
 	self.IsFrozen = true
-	self.Humanoid.WalkSpeed = 0
-	self.Humanoid.JumpPower = 0
-	self.Humanoid.AutoRotate = false
+	self:_refreshMovement()
 end
 
 function BaseCharacter:Unfreeze()
@@ -46,9 +86,7 @@ function BaseCharacter:Unfreeze()
 	end
 
 	self.IsFrozen = false
-	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed
-	self.Humanoid.JumpPower = self.DefaultJumpPower
-	self.Humanoid.AutoRotate = true
+	self:_refreshMovement()
 end
 
 function BaseCharacter:IsAlive()
@@ -71,12 +109,15 @@ end
 
 function BaseCharacter:ApplyDamage(amount)
 	if self.IsInvincible then
-		return
+		return false
 	end
 	
 	if self.Humanoid then
 		self.Humanoid:TakeDamage(amount)
+		return true
 	end
+
+	return false
 end
 
 function BaseCharacter:Destroy()

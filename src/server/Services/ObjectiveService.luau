@@ -5,6 +5,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local BaseObjective = require(ServerScriptService.Server.Classes.BaseObjective)
 local ObjectiveDefinitions = require(ReplicatedStorage.Shared.Data.ObjectiveDefinitions)
 local ObjectivePhase = require(ReplicatedStorage.Shared.Enums.ObjectivePhase)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local ObjectiveService = {}
 ObjectiveService.Name = "ObjectiveService"
@@ -18,7 +19,7 @@ end
 
 function ObjectiveService:Start()
 	self:_registerExistingObjectives()
-	print("[ObjectiveService] Started")
+	DebugLog:Log("Objectives", "[ObjectiveService] Started")
 end
 
 function ObjectiveService:_registerExistingObjectives()
@@ -28,7 +29,7 @@ function ObjectiveService:_registerExistingObjectives()
 		
 		table.insert(self.Objectives, objective)
 		
-		print(string.format(
+		DebugLog:Log("Objectives", string.format(
 			"[ObjectiveService] Registered objective: %s | Type: %s | Phase: %s",
 			objective.DisplayName,
 			objective.Type,
@@ -60,17 +61,18 @@ function ObjectiveService:SetPhaseEnabled(objectivePhase, enabled)
 		end
 	end
 	
-	print(string.format("[ObjectiveService] Set phase '%s' enabled = %s", objectivePhase, tostring(enabled)))
+	DebugLog:Log("Objectives", string.format("[ObjectiveService] Set phase '%s' enabled = %s", objectivePhase, tostring(enabled)))
 end
 
 function ObjectiveService:ResetObjectives()
 	for _, objective in ipairs(self.Objectives) do
 		objective.Progress = 0
+		objective.LastLoggedProgressStep = -1
 		objective.IsComplete = false
 		objective.IsEnabled = objective.StartsEnabled
 	end
 	
-	print("[ObjectiveService] Objectives reset")
+	DebugLog:Log("Objectives", "[ObjectiveService] Objectives reset")
 end
 
 function ObjectiveService:TryProgressObjectiveByName(name, amount)
@@ -92,16 +94,20 @@ function ObjectiveService:ProgressObjective(objective, amount)
 	if not succeeded then
 		return false
 	end
-	
-	print(string.format(
-		"[ObjectiveService] %s progress: %1.f / %1.f",
-		objective.DisplayName,
-		objective.Progress,
-		objective.MaxProgress
-	))
+
+	local currentProgressStep = math.floor(objective.Progress)
+	if currentProgressStep > (objective.LastLoggedProgressStep or -1) then
+		objective.LastLoggedProgressStep = currentProgressStep
+		DebugLog:Log("ObjectiveProgress", string.format(
+			"[ObjectiveService] %s progress: %1.f / %1.f",
+			objective.DisplayName,
+			objective.Progress,
+			objective.MaxProgress
+		))
+	end
 	
 	if objective.IsComplete then
-		print("[ObjectiveService] Completed objective:", objective.DisplayName)
+		DebugLog:Log("Objectives", "[ObjectiveService] Completed objective:", objective.DisplayName)
 		
 		local roundManager = self.Services.RoundManager
 		if roundManager and roundManager.OnObjectiveCompleted then

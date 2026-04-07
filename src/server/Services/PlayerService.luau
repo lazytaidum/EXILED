@@ -1,4 +1,6 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local PlayerService = {}
 PlayerService.Name = "PlayerService"
@@ -20,7 +22,7 @@ function PlayerService:Start()
 		self:_onPlayerRemoving(player)
 	end)
 	
-	print("[PlayerService] Started")
+	DebugLog:Log("Player", "[PlayerService] Started")
 end
 
 function PlayerService:_onPlayerAdded(player)
@@ -29,12 +31,12 @@ function PlayerService:_onPlayerAdded(player)
 		HasEscaped = false,
 		IsLoaded = true,
 	}
-	print("[PlayerService] Added", player.Name)
+	DebugLog:Log("Player", "[PlayerService] Added", player.Name)
 end
 
 function PlayerService:_onPlayerRemoving(player)
 	self.PlayerStates[player] = nil
-	print("[PlayerService] Removed", player.Name)
+	DebugLog:Log("Player", "[PlayerService] Removed", player.Name)
 end
 
 function PlayerService:GetPlayerState(player)

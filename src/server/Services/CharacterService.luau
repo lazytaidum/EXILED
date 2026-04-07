@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BaseCharacter = require(ServerScriptService.Server.Classes.BaseCharacter)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local CharacterService = {}
 CharacterService.Name = "CharacterService"
@@ -29,7 +31,7 @@ function CharacterService:Start()
 		self:_cleanupPlayer(player)
 	end)
 	
-	print("[CharacterService] Started")
+	DebugLog:Log("Character", "[CharacterService] Started")
 end
 
 function CharacterService:_connectPlayer(player)
@@ -64,7 +66,7 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 	
 	character.Humanoid.Died:Connect(function()
 		if character.IsInvincible then
-			print("[CharacterService] Ignoring death for invincible character", player.Name)
+			DebugLog:Log("Character", "[CharacterService] Ignoring death for invincible character", player.Name)
 			return
 		end
 		local livePlayerService = self.Services.PlayerService
@@ -76,10 +78,10 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 		if liveRoundManager and liveRoundManager:IsPlayerActive(player) then
 			liveRoundManager:SetPlayerEliminated(player)
 		end
-		print("[CharacterService] Character died for", player.Name)
+		DebugLog:Log("Character", "[CharacterService] Character died for", player.Name)
 	end)
 	
-	print("[CharacterService] Registered character for", player.Name)
+	DebugLog:Log("Character", "[CharacterService] Registered character for", player.Name)
 end
 
 function CharacterService:_onCharacterRemoving(player, characterModel)
@@ -104,7 +106,7 @@ function CharacterService:_removeCharacter(player, characterModel)
 		playerService:SetAlive(player, false)
 	end
 	
-	print("[CharacterService] Removed character for", player.Name)
+	DebugLog:Log("Character", "[CharacterService] Removed character for", player.Name)
 end
 
 function CharacterService:FreezeAll()

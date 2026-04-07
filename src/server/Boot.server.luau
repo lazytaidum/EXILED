@@ -3,6 +3,8 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local ServerFolder = ServerScriptService:WaitForChild("Server")
 local ServicesFolder = ServerFolder:WaitForChild("Services")
 local ManagersFolder = ServerFolder:WaitForChild("Managers")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local bootOrder = {
 	require(ServicesFolder.RemoteRegistry),
@@ -34,4 +36,4 @@ for _, service in ipairs(bootOrder) do
 	end
 end
 
-print("[Boot] Server boot complete.")
+DebugLog:Log("Boot", "[Boot] Server boot complete.")

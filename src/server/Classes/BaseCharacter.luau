@@ -14,10 +14,31 @@ function BaseCharacter.new(player, model)
 	self.DefaultJumpPower = self.Humanoid.JumpPower
 	self.IsInvincible = false
 	
-	self.SpeedMultiplier = 1
+	self.SpeedMultipliers = {}
 	self.SpeedModifierToken = 0
 	
 	return self
+end
+
+function BaseCharacter:_getCombinedSpeedMultiplier()
+	local boostMultiplier = 1
+	local slowMultiplier = 1
+	
+	for key, value in pairs(self.SpeedMultipliers) do
+		if key == "OnHitHaste" and value > 1 then
+			boostMultiplier = math.max(boostMultiplier, value)
+		elseif value > 1 then
+			boostMultiplier *= value
+		else
+			slowMultiplier *= value
+		end
+	end
+	
+	if self.SpeedMultipliers.OnHitHaste then
+		slowMultiplier = 1
+	end
+	
+	return boostMultiplier * slowMultiplier
 end
 
 function BaseCharacter:_refreshMovement()
@@ -32,7 +53,7 @@ function BaseCharacter:_refreshMovement()
 		return
 	end
 	
-	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * self.SpeedMultiplier
+	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * self:_getCombinedSpeedMultiplier()
 	self.Humanoid.JumpPower = self.DefaultJumpPower
 	self.Humanoid.AutoRotate = true
 end
@@ -51,23 +72,28 @@ function BaseCharacter:SetJumpPower(jumpPower)
 	end
 end
 
-function BaseCharacter:SetSpeedMultiplier(multiplier)
-	self.SpeedMultiplier = multiplier or 1
+function BaseCharacter:SetSpeedMultiplier(key, multiplier)
+	if multiplier == nil then
+		self.SpeedMultipliers[key] = nil
+	else
+		self.SpeedMultipliers[key] = multiplier
+	end
+	
 	self:_refreshMovement()
 end
 
-function BaseCharacter:ApplyTemporarySpeedMultiplier(multiplier, duration)
+function BaseCharacter:ApplyTemporarySpeedMultiplier(key, multiplier, duration)
 	self.SpeedModifierToken += 1
 	local token = self.SpeedModifierToken
 	
-	self:SetSpeedMultiplier(multiplier)
+	self:SetSpeedMultiplier(key, multiplier)
 	
 	task.delay(duration, function()
 		if self.SpeedModifierToken ~= token then
 			return
 		end
 		
-		self:SetSpeedMultiplier(1)
+		self:SetSpeedMultiplier(key, nil)
 	end)
 end
 
@@ -116,7 +142,7 @@ function BaseCharacter:ApplyDamage(amount)
 		self.Humanoid:TakeDamage(amount)
 		return true
 	end
-
+	
 	return false
 end
 

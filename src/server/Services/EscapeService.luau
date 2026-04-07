@@ -1,5 +1,7 @@
 local Workspace = game:GetService("Workspace")
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local EscapeService = {}
 EscapeService.Name = "EscapeService"
@@ -15,7 +17,7 @@ function EscapeService:Start()
 		self:_onEscapeZoneTouched(hit)
 	end)
 	
-	print("[EscapeService] Started")
+	DebugLog:Log("Round", "[EscapeService] Started")
 end
 
 function EscapeService:_onEscapeZoneTouched(hit)
@@ -71,7 +73,7 @@ function EscapeService:TryEscapePlayer(player)
 		end
 	end
 
-	print("[EscapeService] Player escaped:", player.Name)
+	DebugLog:Log("Round", "[EscapeService] Player escaped:", player.Name)
 end
 
 return EscapeService

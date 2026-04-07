@@ -1,6 +1,8 @@
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 local playerScripts = player:WaitForChild("PlayerScripts")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local ClientFolder = playerScripts:WaitForChild("Client")
 local ControllersFolder = ClientFolder:WaitForChild("Controllers")
@@ -31,4 +33,4 @@ for _, controller in ipairs(bootOrder) do
 	end
 end
 
-print("[Boot] Client boot complete.")
+DebugLog:Log("Boot", "[Boot] Client boot complete.")

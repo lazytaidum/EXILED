@@ -17,6 +17,7 @@ function BaseObjective.new(instance, definition)
 	self.ChargeRate = self.Definition.ChargeRate or 1
 	
 	self.Progress = 0
+	self.LastLoggedProgressStep = -1
 	self.IsComplete = false
 	self.IsEnabled = self.StartsEnabled
 	

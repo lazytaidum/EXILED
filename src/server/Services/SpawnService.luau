@@ -1,4 +1,6 @@
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local SpawnService = {}
 SpawnService.Name = "SpawnService"
@@ -12,7 +14,7 @@ function SpawnService:Init(services)
 end
 
 function SpawnService:Start()
-	print("[SpawnService] Started")
+	DebugLog:Log("Spawn", "[SpawnService] Started")
 end
 
 function SpawnService:TeleportPlayerToLobby(player)
@@ -49,13 +51,13 @@ function SpawnService:GetRandomReceptionSpawn()
 end
 
 function SpawnService:TeleportPlayersToLobby(players)
-	for player in pairs(players) do
+	for _, player in ipairs(players) do
 		self:TeleportPlayerToLobby(player)
 	end
 end
 
 function SpawnService:TeleportPlayersToReception(players)
-	for player in pairs(players) do
+	for _, player in ipairs(players) do
 		self:TeleportPlayerToReception(player)
 	end
 end

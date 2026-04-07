@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local InteractionController = {}
 InteractionController.Name = "InteractionController"
@@ -31,10 +32,12 @@ function InteractionController:Start()
 		self:HandleInteractionUpdate(data)
 	end)
 	
-	print("[InteractionController] Started")
+	DebugLog:Log("ClientInteraction", "[InteractionController] Started")
 end
 
 function InteractionController:HandleInteractionUpdate(data)
+	DebugLog:Log("ClientInteraction", "[InteractionController] Received interaction state:", data.State)
+
 	if data.State == "Start" then
 		self.UI.Root.Enabled = true
 		self.UI.Label.Text = data.Target or "Interacting..."

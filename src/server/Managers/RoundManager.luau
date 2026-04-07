@@ -4,6 +4,7 @@ local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RoundOutcome = require(ReplicatedStorage.Shared.Enums.RoundOutcome)
 local RoundConfig = require(ReplicatedStorage.Shared.Data.RoundConfig)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local RoundManager = {}
 RoundManager.Name = "RoundManager"
@@ -21,7 +22,7 @@ function RoundManager:Init(services)
 end
 
 function RoundManager:Start()
-	print("[RoundManager] Started")
+	DebugLog:Log("Round", "[RoundManager] Started")
 
 	if self.IsRunning then
 		return
@@ -38,9 +39,15 @@ function RoundManager:SetPhase(phase, duration)
 	self.CurrentPhase = phase
 	self.TimeLeft = duration or 0
 
-	print(string.format("[RoundManager] Phase -> %s (%ds)", phase, self.TimeLeft))
+	DebugLog:Log("Round", string.format("[RoundManager] Phase -> %s (%ds)", phase, self.TimeLeft))
 
 	if phase == GamePhase.Lobby then
+		if self.Services.InteractionService then
+			self.Services.InteractionService:StopAllInteractions("LobbyReset")
+		end
+		if self.Services.ObjectiveService then
+			self.Services.ObjectiveService:ResetObjectives()
+		end
 		self:ClearRound()
 		for _, player in ipairs(self.Services.PlayerService:GetPlayers()) do
 			self:ApplyCurrentPhaseStateToPlayer(player)
@@ -63,6 +70,9 @@ function RoundManager:SetPhase(phase, duration)
 		end
 
 	elseif phase == GamePhase.Results then
+		if self.Services.InteractionService then
+			self.Services.InteractionService:StopAllInteractions("Results")
+		end
 		self.Services.EntityService:SetAllEntitiesActive(false)
 		for _, player in ipairs(self.ActivePlayers) do
 			self:ApplyCurrentPhaseStateToPlayer(player)
@@ -145,7 +155,7 @@ function RoundManager:BuildRoundRoster()
 		end
 	end
 
-	print(string.format("[RoundManager] Built roster with %d active players", #self.ActivePlayers))
+	DebugLog:Log("Round", string.format("[RoundManager] Built roster with %d active players", #self.ActivePlayers))
 end
 
 function RoundManager:ClearRound()
@@ -229,8 +239,8 @@ function RoundManager:SetPlayerEliminated(player)
 	roundState.IsAlive = false
 	roundState.IsEliminated = true
 
-	print("[RoundManager] Eliminated", player.Name)
-	print("[RoundManager] Alive remaining:", self:GetAliveCount())
+	DebugLog:Log("Round", "[RoundManager] Eliminated", player.Name)
+	DebugLog:Log("Round", "[RoundManager] Alive remaining:", self:GetAliveCount())
 
 	self:CheckRoundEnd()
 end
@@ -248,9 +258,9 @@ function RoundManager:SetPlayerEscaped(player)
 	roundState.IsAlive = false
 	roundState.HasEscaped = true
 
-	print("[RoundManager] Escaped", player.Name)
-	print("[RoundManager] Escaped count:", self:GetEscapedCount(), "/", self:GetRequiredEscapeCount())
-	print("[RoundManager] Alive remaining:", self:GetAliveCount())
+	DebugLog:Log("Round", "[RoundManager] Escaped", player.Name)
+	DebugLog:Log("Round", "[RoundManager] Escaped count:", self:GetEscapedCount(), "/", self:GetRequiredEscapeCount())
+	DebugLog:Log("Round", "[RoundManager] Alive remaining:", self:GetAliveCount())
 
 	self:CheckRoundEnd()
 end
@@ -310,7 +320,7 @@ function RoundManager:CheckRoundEnd()
 	local requiredEscapeCount = self:GetRequiredEscapeCount()
 	
 	if escapedCount >= requiredEscapeCount then
-		print("[RoundManager] Escape threshold reached, Remnants win")
+		DebugLog:Log("Round", "[RoundManager] Escape threshold reached, Remnants win")
 		self:EndReception(RoundOutcome.RemnantsWin)
 		return
 	end
@@ -318,7 +328,7 @@ function RoundManager:CheckRoundEnd()
 	if aliveCount <= 0 then
 		local escapedCount = self:GetEscapedCount()
 		local outcome = escapedCount > 0 and RoundOutcome.RemnantsWin or RoundOutcome.EntitiesWin
-		print("[RoundManager] No active players remain, ending round early.")
+		DebugLog:Log("Round", "[RoundManager] No active players remain, ending round early.")
 		self:EndReception(outcome)
 	end
 end
@@ -331,11 +341,11 @@ function RoundManager:EndReception(outcome)
 	self.CurrentOutcome = outcome or RoundOutcome.None
 	self.SkipPhase = true
 
-	print("[RoundManager] Reception ended with outcome:", self.CurrentOutcome)
+	DebugLog:Log("Round", "[RoundManager] Reception ended with outcome:", self.CurrentOutcome)
 end
 
 function RoundManager:OnReceptionTimerExpired()
-	print("[RoundManager] Reception timer expired")
+	DebugLog:Log("Round", "[RoundManager] Reception timer expired")
 
 	local aliveCount = self:GetAliveCount()
 	local escapedCount = self:GetEscapedCount()

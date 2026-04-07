@@ -22,13 +22,6 @@ function UIController:Start()
 	
 	task.spawn(function()
 		while true do
-			local roundController = self.Controllers.RoundController
-			local state = roundController and roundController:GetState()
-			
-			if state then
-				print(string.format("[UI] Phase: %s | TimeLeft: %d | Outcome: %s", tostring(state.Phase), tonumber(state.TimeLeft) or 0, tostring(state.Outcome or "None")))
-			end
-			
 			self:UpdateHUD()
 			task.wait(0.1)
 		end

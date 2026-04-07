@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local RoundController = {}
 RoundController.Name = "RoundController"
@@ -25,7 +26,7 @@ function RoundController:Start()
 			Outcome = state.Outcome or "None",
 		}
 		
-		print("[RoundController] Recieved state:", state.Phase, state.TimeLeft)
+		DebugLog:Log("ClientRound", "[RoundController] Received state:", state.Phase, state.TimeLeft)
 	end)
 	
 	roundTimerUpdated.OnClientEvent:Connect(function(state)
@@ -36,7 +37,7 @@ function RoundController:Start()
 		}
 	end)
 
-	print("[RoundController] Started")
+	DebugLog:Log("ClientRound", "[RoundController] Started")
 end
 
 function RoundController:GetState()

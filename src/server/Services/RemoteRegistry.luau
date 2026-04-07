@@ -1,6 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local RemoteRegistry = {}
 RemoteRegistry.Name = "RemoteRegistry"
@@ -26,7 +27,7 @@ function RemoteRegistry:Init()
 end
 
 function RemoteRegistry:Start()
-	print("[RemoteRegistry] Started")
+	DebugLog:Log("Boot", "[RemoteRegistry] Started")
 end
 
 function RemoteRegistry:GetRemote(name)

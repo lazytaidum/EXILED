@@ -5,6 +5,7 @@ local ServerScriptService = game:GetService("ServerScriptService")
 local BaseEntity = require(ServerScriptService.Server.Classes.BaseEntity)
 local EntityDefinitions = require(ReplicatedStorage.Shared.Data.EntityDefinitions)
 local EntityAttributes = require(ReplicatedStorage.Shared.Enums.EntityAttributes)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local EntityService = {}
 EntityService.Name = "EntityService"
@@ -24,7 +25,7 @@ function EntityService:Start()
 		self:_runEntityLoop()
 	end)
 
-	print("[EntityService] Started")
+	DebugLog:Log("Entity", "[EntityService] Started")
 end
 
 function EntityService:_registerExistingEntities()
@@ -35,7 +36,7 @@ function EntityService:_registerExistingEntities()
 
 			table.insert(self.Entities, entity)
 
-			print(string.format(
+			DebugLog:Log("Entity", string.format(
 				"[EntityService] Registered entity: %s | Stars: %d | Weight: %d",
 				entity.DisplayName,
 				entity.StarRating,
@@ -71,13 +72,19 @@ function EntityService:_updateEntity(entity, deltaTime)
 			if distance <= entity.AttackRange then
 				local didDamage = targetCharacter:ApplyDamage(entity.Damage)
 				if didDamage then
-					targetCharacter:ApplyTemporarySpeedMultiplier(1.45, 1.5)
+					local targetPlayer = targetCharacter.Player
+					targetCharacter:ApplyTemporarySpeedMultiplier("OnHitHaste", 1.45, 1.5)
+					
+					local interactionService = self.Services.InteractionService
+					if interactionService and targetPlayer and interactionService:IsInteracting(targetPlayer) then
+						interactionService:InterruptInteraction(targetPlayer, "Damaged")
+					end
 				end
 				entity:MarkAttack()
-
+				
 				local player = targetCharacter.Player
 				local name = player and player.Name or "Unknown"
-				print(string.format(
+				DebugLog:Log("Entity", string.format(
 					"[EntityService] %s hit %s for %d",
 					entity.Model.Name,
 					name,
@@ -132,7 +139,7 @@ function EntityService:SetAllEntitiesActive(state)
 		end
 	end
 
-	print("[EntityService] Entities active:", state)
+	DebugLog:Log("Entity", "[EntityService] Entities active:", state)
 end
 
 return EntityService

@@ -2,6 +2,7 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local InputController = {}
 InputController.Name = "InputController"
@@ -22,6 +23,7 @@ function InputController:Start()
 		
 		if input.KeyCode == Enum.KeyCode.Space then
 			self.IsHoldingInteract = true
+			DebugLog:Log("ClientInteraction", "[InputController] Interact key pressed")
 			self:RequestInteractStart()
 		end
 	end)
@@ -29,18 +31,21 @@ function InputController:Start()
 	UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
 		if input.KeyCode == Enum.KeyCode.Space then
 			self.IsHoldingInteract = false
+			DebugLog:Log("ClientInteraction", "[InputController] Interact key released")
 			self:RequestInteractStop()
 		end
 	end)
 	
-	print("[InputController] Started")
+	DebugLog:Log("ClientInteraction", "[InputController] Started")
 end
 
 function InputController:RequestInteractStart()
+	DebugLog:Log("ClientInteraction", "[InputController] Sending interact start")
 	self.RequestInteractRemote:FireServer(true)
 end
 
 function InputController:RequestInteractStop()
+	DebugLog:Log("ClientInteraction", "[InputController] Sending interact stop")
 	self.RequestInteractRemote:FireServer(false)
 end
 

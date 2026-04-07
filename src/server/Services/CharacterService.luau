@@ -57,6 +57,8 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 	local playerService = self.Services.PlayerService
 	if playerService then
 		playerService:SetAlive(player, true)
+		playerService:SetMovementState(player, "IsSprinting", false)
+		playerService:SetMovementState(player, "IsCrouching", false)
 	end
 
 	local roundManager = self.Services.RoundManager
@@ -72,6 +74,8 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 		local livePlayerService = self.Services.PlayerService
 		if livePlayerService then
 			livePlayerService:SetAlive(player, false)
+			livePlayerService:SetMovementState(player, "IsSprinting", false)
+			livePlayerService:SetMovementState(player, "IsCrouching", false)
 		end
 		
 		local liveRoundManager = self.Services.RoundManager
@@ -104,6 +108,8 @@ function CharacterService:_removeCharacter(player, characterModel)
 	local playerService = self.Services.PlayerService
 	if playerService then
 		playerService:SetAlive(player, false)
+		playerService:SetMovementState(player, "IsSprinting", false)
+		playerService:SetMovementState(player, "IsCrouching", false)
 	end
 	
 	DebugLog:Log("Character", "[CharacterService] Removed character for", player.Name)

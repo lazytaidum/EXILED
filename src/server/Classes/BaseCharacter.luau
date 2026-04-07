@@ -12,10 +12,16 @@ function BaseCharacter.new(player, model)
 	self.IsFrozen = false
 	self.DefaultWalkSpeed = self.Humanoid.WalkSpeed
 	self.DefaultJumpPower = self.Humanoid.JumpPower
+	self.DefaultHipHeight = self.Humanoid.HipHeight
 	self.IsInvincible = false
+	self.IsSprinting = false
+	self.IsCrouching = false
 	
 	self.SpeedMultipliers = {}
 	self.SpeedModifierToken = 0
+	self.SprintMultiplier = 1.45
+	self.CrouchMultiplier = 0.5
+	self.CrouchHipHeightMultiplier = 0.6
 	
 	return self
 end
@@ -49,12 +55,26 @@ function BaseCharacter:_refreshMovement()
 	if self.IsFrozen then
 		self.Humanoid.WalkSpeed = 0
 		self.Humanoid.JumpPower = 0
+		self.Humanoid.HipHeight = self.DefaultHipHeight
 		self.Humanoid.AutoRotate = false
 		return
 	end
-	
-	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * self:_getCombinedSpeedMultiplier()
-	self.Humanoid.JumpPower = self.DefaultJumpPower
+
+	local movementMultiplier = self:_getCombinedSpeedMultiplier()
+	if self.IsSprinting then
+		movementMultiplier *= self.SprintMultiplier
+	end
+
+	if self.IsCrouching then
+		movementMultiplier *= self.CrouchMultiplier
+		self.Humanoid.JumpPower = 0
+		self.Humanoid.HipHeight = self.DefaultHipHeight * self.CrouchHipHeightMultiplier
+	else
+		self.Humanoid.JumpPower = self.DefaultJumpPower
+		self.Humanoid.HipHeight = self.DefaultHipHeight
+	end
+
+	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * movementMultiplier
 	self.Humanoid.AutoRotate = true
 end
 
@@ -79,6 +99,34 @@ function BaseCharacter:SetSpeedMultiplier(key, multiplier)
 		self.SpeedMultipliers[key] = multiplier
 	end
 	
+	self:_refreshMovement()
+end
+
+function BaseCharacter:SetSprinting(state)
+	state = state == true
+	if self.IsSprinting == state then
+		return
+	end
+
+	self.IsSprinting = state
+	if state then
+		self.IsCrouching = false
+	end
+
+	self:_refreshMovement()
+end
+
+function BaseCharacter:SetCrouching(state)
+	state = state == true
+	if self.IsCrouching == state then
+		return
+	end
+
+	self.IsCrouching = state
+	if state then
+		self.IsSprinting = false
+	end
+
 	self:_refreshMovement()
 end
 

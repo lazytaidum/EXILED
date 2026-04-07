@@ -30,6 +30,8 @@ function PlayerService:_onPlayerAdded(player)
 		IsAlive = true,
 		HasEscaped = false,
 		IsLoaded = true,
+		IsSprinting = false,
+		IsCrouching = false,
 	}
 	DebugLog:Log("Player", "[PlayerService] Added", player.Name)
 end
@@ -58,6 +60,15 @@ function PlayerService:SetAlive(player, isAlive)
 	if state then
 		state.IsAlive = isAlive
 	end
+end
+
+function PlayerService:SetMovementState(player, stateKey, value)
+	local state = self.PlayerStates[player]
+	if not state then
+		return
+	end
+
+	state[stateKey] = value
 end
 
 return PlayerService

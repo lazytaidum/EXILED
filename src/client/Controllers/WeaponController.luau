@@ -8,7 +8,8 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 local WeaponController = {}
 WeaponController.Name = "WeaponController"
 
-function WeaponController:Init()
+function WeaponController:Init(controllers)
+	self.Controllers = controllers
 	self.Shared = ReplicatedStorage:WaitForChild("Shared")
 	self.RemotesFolder = self.Shared:WaitForChild("Remotes")
 	self.RequestWeaponActionRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestWeaponAction)
@@ -19,6 +20,10 @@ end
 function WeaponController:Start()
 	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		if gameProcessedEvent then
+			return
+		end
+
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
 			return
 		end
 

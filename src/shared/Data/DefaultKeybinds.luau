@@ -25,7 +25,11 @@ local DefaultKeybinds = {
 	},
 
 	Mouse = {
+<<<<<<< HEAD
 		MouseButton1 = { ActionToken.PrimaryFire },
+=======
+		MouseButton1 = {},
+>>>>>>> 9defa84 (WHOLE LOTTA SHT)
 		MouseButton2 = {},
 		MouseWheel = {},
 	},

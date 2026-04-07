@@ -1,0 +1,4078 @@
+<roblox version="4">
+  <Item class="Lighting" referent="0">
+    <Properties>
+      <string name="Name">Lighting</string>
+      <Color3 name="Ambient">
+        <R>0</R>
+        <G>0</G>
+        <B>0</B>
+      </Color3>
+      <float name="Brightness">2</float>
+      <bool name="GlobalShadows">true</bool>
+      <bool name="Outlines">false</bool>
+      <token name="Technology">1</token>
+    </Properties>
+  </Item>
+  <Item class="ReplicatedStorage" referent="1">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="2">
+      <Properties>
+        <string name="Name">Shared</string>
+      </Properties>
+      <Item class="Folder" referent="3">
+        <Properties>
+          <string name="Name">Constants</string>
+        </Properties>
+        <Item class="ModuleScript" referent="4">
+          <Properties>
+            <string name="Name">RemoteNames</string>
+            <string name="Source"><![CDATA[local RemoteNames = {
+	RoundStateChanged = "RoundStateChanged",
+	RoundTimerUpdated = "RoundTimerUpdated",
+	
+	RequestInteract = "RequestInteract",
+	InteractionStateChanged = "InteractionStateChanged",
+	RequestWeaponAction = "RequestWeaponAction",
+	WeaponStateChanged = "WeaponStateChanged",
+}
+
+return RemoteNames
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="5">
+        <Properties>
+          <string name="Name">Data</string>
+        </Properties>
+        <Item class="ModuleScript" referent="6">
+          <Properties>
+            <string name="Name">ActionResolutionRules</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ActionName = require(ReplicatedStorage.Shared.Enums.ActionName)
+local ActionToken = require(ReplicatedStorage.Shared.Enums.ActionToken)
+local InputContext = require(ReplicatedStorage.Shared.Enums.InputContext)
+
+local ActionResolutionRules = {
+	[ActionToken.PrimaryContextAction] = {
+		{ context = InputContext.SkillCheck, action = ActionName.SkillCheck, priority = 100 },
+		{ context = InputContext.DoorSlam, action = ActionName.DoorSlam, priority = 90 },
+		{ context = InputContext.NearObjective, action = ActionName.Interact, priority = 50 },
+		{ action = ActionName.Interact, priority = 0 },
+	},
+
+	[ActionToken.SecondaryContextAction] = {
+		{ context = InputContext.NearToolboxObjective, action = ActionName.ToolboxUse, priority = 100 },
+		{ action = ActionName.Ability2, priority = 0 },
+	},
+
+	[ActionToken.PrimaryFire] = {
+		{ action = ActionName.PrimaryFire, priority = 0 },
+	},
+
+	[ActionToken.Sprint] = {
+		{ action = ActionName.Sprint, priority = 0 },
+	},
+
+	[ActionToken.Crouch] = {
+		{ action = ActionName.Crouch, priority = 0 },
+	},
+
+	[ActionToken.Inventory] = {
+		{ action = ActionName.Inventory, priority = 0 },
+	},
+
+	[ActionToken.RadialMenu] = {
+		{ action = ActionName.RadialMenu, priority = 0 },
+	},
+
+	[ActionToken.Reload] = {
+		{ action = ActionName.Reload, priority = 0 },
+	},
+
+	[ActionToken.Flashlight] = {
+		{ action = ActionName.Flashlight, priority = 0 },
+	},
+
+	[ActionToken.Ability1] = {
+		{ action = ActionName.Ability1, priority = 0 },
+	},
+
+	[ActionToken.Ability2] = {
+		{ action = ActionName.Ability2, priority = 0 },
+	},
+
+	[ActionToken.Ability3] = {
+		{ action = ActionName.Ability3, priority = 0 },
+	},
+
+	[ActionToken.Perk1] = {
+		{ action = ActionName.Perk1, priority = 0 },
+	},
+
+	[ActionToken.Perk2] = {
+		{ action = ActionName.Perk2, priority = 0 },
+	},
+
+	[ActionToken.Perk3] = {
+		{ action = ActionName.Perk3, priority = 0 },
+	},
+
+	[ActionToken.Perk4] = {
+		{ action = ActionName.Perk4, priority = 0 },
+	},
+}
+
+return ActionResolutionRules
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="7">
+          <Properties>
+            <string name="Name">DebugFlags</string>
+            <string name="Source"><![CDATA[local DebugFlags = {
+	Enabled = true,
+	Round = true,
+	Objectives = true,
+	ObjectiveProgress = false,
+	Interaction = true,
+	Entity = true,
+	Character = false,
+	Player = false,
+	Spawn = true,
+	ClientRound = false,
+	ClientInteraction = true,
+	Weapon = true,
+	ClientWeapon = true,
+}
+
+return DebugFlags
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="8">
+          <Properties>
+            <string name="Name">DefaultKeybinds</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ActionToken = require(ReplicatedStorage.Shared.Enums.ActionToken)
+
+local DefaultKeybinds = {
+	Keyboard = {
+		Space = { ActionToken.PrimaryContextAction },
+		E = { ActionToken.SecondaryContextAction, ActionToken.Ability2 },
+
+		LeftShift = { ActionToken.Sprint },
+		LeftControl = { ActionToken.Crouch },
+
+		G = { ActionToken.Inventory },
+		LeftAlt = { ActionToken.RadialMenu },
+
+		R = { ActionToken.Reload },
+		F = { ActionToken.Flashlight },
+
+		Q = { ActionToken.Ability1 },
+
+		Z = { ActionToken.Perk1 },
+		X = { ActionToken.Perk2 },
+		C = { ActionToken.Perk3 },
+		V = { ActionToken.Perk4 },
+	},
+
+	Mouse = {
+		MouseButton1 = { ActionToken.PrimaryFire },
+		MouseButton2 = {},
+		MouseWheel = {},
+	},
+}
+
+return DefaultKeybinds
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="9">
+          <Properties>
+            <string name="Name">EntityDefinitions</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local EntityAttributes = require(ReplicatedStorage.Shared.Enums.EntityAttributes)
+
+local EntityDefinitions = {
+	TestEntity = {
+		Id = "TestEntity",
+		DisplayName = "Test Entity",
+		StarRating = 1,
+		Weight = 1,
+		
+		Attributes = {
+			EntityAttributes.Chase
+		},
+		
+		Stats = {
+			Damage = 10,
+			AttackRange = 10,
+			AttackInterval = 1.5,
+			MoveSpeed = 10,
+		},
+		
+		GroupEntity = false,
+		PrimaryEntity = false,
+	}
+}
+
+
+return EntityDefinitions
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="10">
+          <Properties>
+            <string name="Name">ObjectiveDefinitions</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local ObjectivePhase = require(ReplicatedStorage.Shared.Enums.ObjectivePhase)
+local ObjectiveType = require(ReplicatedStorage.Shared.Enums.ObjectiveType)
+
+local ObjectiveDefinitions = {
+	TestObjective = {
+		Id = "TestObjective",
+		DisplayName = "Test Objective",
+		Type = ObjectiveType.MapObjective,
+		Phase = ObjectivePhase.Primary,
+		
+		MaxProgress = 5,
+		ChargeRate = 1,
+		
+		Shared = true,
+		StartsEnabled = true,
+	},
+}
+
+return ObjectiveDefinitions
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="11">
+          <Properties>
+            <string name="Name">RoundConfig</string>
+            <string name="Source"><![CDATA[local RoundConfig = {
+	IntermissionDuration = 5,
+	VotingDuration = 5,
+	PreparationDuration = 5,
+	ReceptionDuration = 20,
+	ResultsDuration = 5,
+}
+
+return RoundConfig
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="12">
+          <Properties>
+            <string name="Name">WeaponDefinitions</string>
+            <string name="Source"><![CDATA[local WeaponDefinitions = {
+	Glock45 = {
+		Id = "Glock45",
+		DisplayName = "Glock 45",
+		MagazineSize = 17,
+		ReserveAmmo = 51,
+		ReloadDuration = 1.35,
+		FireCooldown = 0.16,
+		Damage = 20,
+		Range = 300,
+		Spread = 0.015,
+		ViewModelLab = {
+			Preview = {
+				WeaponSize = Vector3.new(0.55, 0.75, 1.7),
+				AccentSize = Vector3.new(0.22, 0.22, 0.55),
+				WeaponColor = Color3.fromRGB(44, 44, 52),
+				AccentColor = Color3.fromRGB(229, 174, 74),
+				RightArmColor = Color3.fromRGB(220, 184, 146),
+				LeftArmColor = Color3.fromRGB(196, 160, 124),
+				TorsoColor = Color3.fromRGB(73, 90, 122),
+			},
+			Transforms = {
+				WeaponOffset = {
+					Position = { X = 0.28, Y = -0.72, Z = -1.5 },
+					Rotation = { X = -8, Y = 6, Z = 2 },
+				},
+				AimOffset = {
+					Position = { X = 0, Y = 0.02, Z = 0.52 },
+					Rotation = { X = 0, Y = 0, Z = 0 },
+				},
+				RightHandGrip = {
+					Position = { X = 0.38, Y = -0.15, Z = 0.08 },
+					Rotation = { X = 12, Y = 90, Z = 72 },
+				},
+				LeftHandGrip = {
+					Position = { X = -0.38, Y = -0.04, Z = 0.62 },
+					Rotation = { X = -6, Y = -88, Z = -78 },
+				},
+				RightShoulder = {
+					Position = { X = 0.68, Y = -0.34, Z = 0.08 },
+					Rotation = { X = 0, Y = 0, Z = 0 },
+				},
+				LeftShoulder = {
+					Position = { X = -0.68, Y = -0.28, Z = 0.1 },
+					Rotation = { X = 0, Y = 0, Z = 0 },
+				},
+			},
+		},
+	},
+}
+
+return WeaponDefinitions
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="13">
+        <Properties>
+          <string name="Name">Enums</string>
+        </Properties>
+        <Item class="ModuleScript" referent="14">
+          <Properties>
+            <string name="Name">ActionName</string>
+            <string name="Source"><![CDATA[local ActionName = {
+	Interact = "Interact",
+	ToolboxUse = "ToolboxUse",
+	SkillCheck = "SkillCheck",
+	DoorSlam = "DoorSlam",
+	PrimaryFire = "PrimaryFire",
+
+	Sprint = "Sprint",
+	Crouch = "Crouch",
+	Reload = "Reload",
+	Flashlight = "Flashlight",
+
+	Inventory = "Inventory",
+	RadialMenu = "RadialMenu",
+
+	Ability1 = "Ability1",
+	Ability2 = "Ability2",
+	Ability3 = "Ability3",
+
+	PassiveAbility = "PassiveAbility",
+
+	Perk1 = "Perk1",
+	Perk2 = "Perk2",
+	Perk3 = "Perk3",
+	Perk4 = "Perk4",
+
+	UseItem = "UseItem",
+	Lockpick = "Lockpick",
+}
+
+return ActionName
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="15">
+          <Properties>
+            <string name="Name">ActionToken</string>
+            <string name="Source"><![CDATA[local ActionToken = {
+	PrimaryContextAction = "PrimaryContextAction",
+	SecondaryContextAction = "SecondaryContextAction",
+	PrimaryFire = "PrimaryFire",
+
+	Sprint = "Sprint",
+	Crouch = "Crouch",
+	Inventory = "Inventory",
+	RadialMenu = "RadialMenu",
+	Reload = "Reload",
+	Flashlight = "Flashlight",
+
+	Ability1 = "Ability1",
+	Ability2 = "Ability2",
+	Ability3 = "Ability3",
+
+	Perk1 = "Perk1",
+	Perk2 = "Perk2",
+	Perk3 = "Perk3",
+	Perk4 = "Perk4",
+}
+
+return ActionToken
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="16">
+          <Properties>
+            <string name="Name">EntityAttributes</string>
+            <string name="Source"><![CDATA[local EntityAttributes = {
+	Chase = "Chase",
+	ScreenDistortion = "ScreenDistortion",
+	RangedAttacks = "RangedAttacks",
+	Teleportation = "Teleportation",
+	AreaDenial = "AreaDenial",
+	StatusApplication = "StatusApplication",
+	InstaDown = "InstaDown",
+	Rage = "Rage",
+}
+
+return EntityAttributes
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="17">
+          <Properties>
+            <string name="Name">GamePhase</string>
+            <string name="Source"><![CDATA[local GamePhase = {
+	Lobby = "Lobby",
+	Voting = "Voting",
+	Preparation = "Preparation",
+	Reception = "Reception",
+	Results = "Results",
+}
+
+return GamePhase
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="18">
+          <Properties>
+            <string name="Name">InputContext</string>
+            <string name="Source"><![CDATA[local InputContext = {
+	SkillCheck = "SkillCheck",
+	DoorSlam = "DoorSlam",
+	NearObjective = "NearObjective",
+	NearToolboxObjective = "NearToolboxObjective",
+
+	InventoryOpen = "InventoryOpen",
+	RadialMenuOpen = "RadialMenuOpen",
+	ChatFocused = "ChatFocused",
+}
+
+return InputContext
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="19">
+          <Properties>
+            <string name="Name">InteractableType</string>
+            <string name="Source"><![CDATA[local InteractableType = {
+	Objective = "Objective",
+	Door = "Door",
+	Loot = "Loot",
+	Glyph = "Glyph",
+	Exit = "Exit",
+}
+
+return InteractableType
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="20">
+          <Properties>
+            <string name="Name">ObjectivePhase</string>
+            <string name="Source">local ObjectivePhase = {
+	None = "None",
+	Primary = "Primary",
+	Secondary = "Secondary",
+	Tertiary = "Tertiary",
+	Exit = "Exit",
+}
+
+return ObjectivePhase</string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="21">
+          <Properties>
+            <string name="Name">RoundOutcome</string>
+            <string name="Source"><![CDATA[local RoundOutcome = {
+	None = "None",
+	RemnantsWin = "RemnantsWin",
+	EntitiesWin = "EntitiesWin",
+	Draw = "Draw",
+}
+
+return RoundOutcome
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="22">
+          <Properties>
+            <string name="Name">WeaponAction</string>
+            <string name="Source"><![CDATA[local WeaponAction = {
+	Fire = "Fire",
+	Reload = "Reload",
+}
+
+return WeaponAction
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="23">
+        <Properties>
+          <string name="Name">Remotes</string>
+        </Properties>
+        <Item class="RemoteEvent" referent="24">
+          <Properties>
+            <string name="Name">InteractionStateChanged</string>
+          </Properties>
+        </Item>
+        <Item class="RemoteEvent" referent="25">
+          <Properties>
+            <string name="Name">MatchTimerUpdated</string>
+          </Properties>
+        </Item>
+        <Item class="RemoteEvent" referent="26">
+          <Properties>
+            <string name="Name">PlayCutscene</string>
+          </Properties>
+        </Item>
+        <Item class="RemoteEvent" referent="27">
+          <Properties>
+            <string name="Name">RequestInteract</string>
+          </Properties>
+        </Item>
+        <Item class="RemoteEvent" referent="28">
+          <Properties>
+            <string name="Name">RoundStateChanged</string>
+          </Properties>
+        </Item>
+        <Item class="RemoteEvent" referent="29">
+          <Properties>
+            <string name="Name">ShowNotification</string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="30">
+        <Properties>
+          <string name="Name">Utility</string>
+        </Properties>
+        <Item class="ModuleScript" referent="31">
+          <Properties>
+            <string name="Name">DebugLog</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local DebugFlags = require(ReplicatedStorage.Shared.Data.DebugFlags)
+
+local DebugLog = {}
+
+function DebugLog:IsEnabled(flagName)
+	if not DebugFlags.Enabled then
+		return false
+	end
+
+	return DebugFlags[flagName] == true
+end
+
+function DebugLog:Log(flagName, ...)
+	if not self:IsEnabled(flagName) then
+		return
+	end
+
+	print(...)
+end
+
+return DebugLog
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="32">
+          <Properties>
+            <string name="Name">TransformUtils</string>
+            <string name="Source"><![CDATA[local TransformUtils = {}
+
+local function cloneVectorTable(vectorTable)
+	return {
+		X = vectorTable.X or 0,
+		Y = vectorTable.Y or 0,
+		Z = vectorTable.Z or 0,
+	}
+end
+
+function TransformUtils.CloneTransform(transform)
+	transform = transform or {}
+
+	return {
+		Position = cloneVectorTable(transform.Position or {}),
+		Rotation = cloneVectorTable(transform.Rotation or {}),
+	}
+end
+
+function TransformUtils.CloneTransformMap(transformMap)
+	local clonedMap = {}
+
+	for name, transform in pairs(transformMap or {}) do
+		clonedMap[name] = TransformUtils.CloneTransform(transform)
+	end
+
+	return clonedMap
+end
+
+function TransformUtils.ToCFrame(transform)
+	transform = transform or {}
+
+	local position = transform.Position or {}
+	local rotation = transform.Rotation or {}
+
+	return CFrame.new(position.X or 0, position.Y or 0, position.Z or 0)
+		* CFrame.Angles(
+			math.rad(rotation.X or 0),
+			math.rad(rotation.Y or 0),
+			math.rad(rotation.Z or 0)
+		)
+end
+
+function TransformUtils.SetAxis(transform, axisGroup, axisName, value)
+	transform[axisGroup] = transform[axisGroup] or {}
+	transform[axisGroup][axisName] = value
+end
+
+function TransformUtils.AdjustAxis(transform, axisGroup, axisName, delta)
+	transform[axisGroup] = transform[axisGroup] or {}
+	transform[axisGroup][axisName] = (transform[axisGroup][axisName] or 0) + delta
+end
+
+function TransformUtils.FormatNumber(value)
+	local rounded = math.round((value or 0) * 1000) / 1000
+	if rounded == -0 then
+		rounded = 0
+	end
+
+	local text = string.format("%.3f", rounded)
+	text = string.gsub(text, "0+$", "")
+	text = string.gsub(text, "%.$", "")
+
+	if text == "" then
+		return "0"
+	end
+
+	return text
+end
+
+function TransformUtils.FormatTransform(transform, indent)
+	indent = indent or "\t"
+
+	local position = transform.Position or {}
+	local rotation = transform.Rotation or {}
+
+	return string.format(
+		"{\n%sPosition = { X = %s, Y = %s, Z = %s },\n%sRotation = { X = %s, Y = %s, Z = %s },\n}",
+		indent,
+		TransformUtils.FormatNumber(position.X),
+		TransformUtils.FormatNumber(position.Y),
+		TransformUtils.FormatNumber(position.Z),
+		indent,
+		TransformUtils.FormatNumber(rotation.X),
+		TransformUtils.FormatNumber(rotation.Y),
+		TransformUtils.FormatNumber(rotation.Z)
+	)
+end
+
+function TransformUtils.FormatTransformMap(transformMap, indent)
+	indent = indent or "\t"
+
+	local names = {}
+	for name in pairs(transformMap or {}) do
+		table.insert(names, name)
+	end
+	table.sort(names)
+
+	local lines = { "{" }
+
+	for _, name in ipairs(names) do
+		table.insert(
+			lines,
+			string.format("%s%s = %s,", indent, name, TransformUtils.FormatTransform(transformMap[name], indent .. "\t"))
+		)
+	end
+
+	table.insert(lines, "}")
+
+	return table.concat(lines, "\n")
+end
+
+return TransformUtils
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="33">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Folder" referent="34">
+      <Properties>
+        <string name="Name">Server</string>
+      </Properties>
+      <Item class="Script" referent="35">
+        <Properties>
+          <string name="Name">Boot</string>
+          <token name="RunContext">0</token>
+          <string name="Source"><![CDATA[local ServerScriptService = game:GetService("ServerScriptService")
+
+local ServerFolder = ServerScriptService:WaitForChild("Server")
+local ServicesFolder = ServerFolder:WaitForChild("Services")
+local ManagersFolder = ServerFolder:WaitForChild("Managers")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local bootOrder = {
+	require(ServicesFolder.RemoteRegistry),
+	require(ServicesFolder.PlayerService),
+	require(ServicesFolder.CharacterService),
+	require(ServicesFolder.WeaponService),
+	require(ServicesFolder.SpawnService),
+	require(ServicesFolder.ObjectiveService),
+	require(ServicesFolder.InteractionService),
+	require(ServicesFolder.EntityService),
+	require(ServicesFolder.EscapeService),
+	require(ManagersFolder.RoundManager),
+}
+
+local Services = {}
+
+for _, service in ipairs(bootOrder) do
+	Services[service.Name] = service
+end
+
+for _, service in ipairs(bootOrder) do
+	if service.Init then
+		service:Init(Services)
+	end
+end
+
+for _, service in ipairs(bootOrder) do
+	if service.Start then
+		service:Start()
+	end
+end
+
+DebugLog:Log("Boot", "[Boot] Server boot complete.")
+]]></string>
+        </Properties>
+      </Item>
+      <Item class="Folder" referent="36">
+        <Properties>
+          <string name="Name">Classes</string>
+        </Properties>
+        <Item class="ModuleScript" referent="37">
+          <Properties>
+            <string name="Name">BaseCharacter</string>
+            <string name="Source"><![CDATA[local BaseCharacter = {}
+BaseCharacter.__index = BaseCharacter
+
+function BaseCharacter.new(player, model)
+	local self = setmetatable({}, BaseCharacter)
+	
+	self.Player = player
+	self.Model = model
+	self.Humanoid = model:WaitForChild("Humanoid")
+	self.RootPart = model:WaitForChild("HumanoidRootPart")
+	
+	self.IsFrozen = false
+	self.DefaultWalkSpeed = self.Humanoid.WalkSpeed
+	self.DefaultJumpPower = self.Humanoid.JumpPower
+	self.IsInvincible = false
+	
+	self.SpeedMultipliers = {}
+	self.SpeedModifierToken = 0
+	
+	return self
+end
+
+function BaseCharacter:_getCombinedSpeedMultiplier()
+	local boostMultiplier = 1
+	local slowMultiplier = 1
+	
+	for key, value in pairs(self.SpeedMultipliers) do
+		if key == "OnHitHaste" and value > 1 then
+			boostMultiplier = math.max(boostMultiplier, value)
+		elseif value > 1 then
+			boostMultiplier *= value
+		else
+			slowMultiplier *= value
+		end
+	end
+	
+	if self.SpeedMultipliers.OnHitHaste then
+		slowMultiplier = 1
+	end
+	
+	return boostMultiplier * slowMultiplier
+end
+
+function BaseCharacter:_refreshMovement()
+	if not self.Humanoid then
+		return
+	end
+	
+	if self.IsFrozen then
+		self.Humanoid.WalkSpeed = 0
+		self.Humanoid.JumpPower = 0
+		self.Humanoid.AutoRotate = false
+		return
+	end
+	
+	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * self:_getCombinedSpeedMultiplier()
+	self.Humanoid.JumpPower = self.DefaultJumpPower
+	self.Humanoid.AutoRotate = true
+end
+
+function BaseCharacter:SetWalkSpeed(speed)
+	if self.Humanoid then
+		self.DefaultWalkSpeed = speed
+		self:_refreshMovement()
+	end
+end
+
+function BaseCharacter:SetJumpPower(jumpPower)
+	if self.Humanoid then
+		self.DefaultJumpPower = jumpPower
+		self:_refreshMovement()
+	end
+end
+
+function BaseCharacter:SetSpeedMultiplier(key, multiplier)
+	if multiplier == nil then
+		self.SpeedMultipliers[key] = nil
+	else
+		self.SpeedMultipliers[key] = multiplier
+	end
+	
+	self:_refreshMovement()
+end
+
+function BaseCharacter:ApplyTemporarySpeedMultiplier(key, multiplier, duration)
+	self.SpeedModifierToken += 1
+	local token = self.SpeedModifierToken
+	
+	self:SetSpeedMultiplier(key, multiplier)
+	
+	task.delay(duration, function()
+		if self.SpeedModifierToken ~= token then
+			return
+		end
+		
+		self:SetSpeedMultiplier(key, nil)
+	end)
+end
+
+function BaseCharacter:Freeze()
+	if not self.Humanoid or self.IsFrozen then
+		return
+	end
+	
+	self.IsFrozen = true
+	self:_refreshMovement()
+end
+
+function BaseCharacter:Unfreeze()
+	if not self.Humanoid or not self.IsFrozen then
+		return
+	end
+
+	self.IsFrozen = false
+	self:_refreshMovement()
+end
+
+function BaseCharacter:IsAlive()
+	return self.Humanoid and self.Humanoid.Health > 0
+end
+
+function BaseCharacter:SetInvincible(state)
+	if self.IsInvincible == state then
+		return
+	end
+	
+	self.IsInvincible = state
+	
+	if self.Humanoid then
+		if state then
+			self.Humanoid.Health = self.Humanoid.MaxHealth
+		end
+	end
+end
+
+function BaseCharacter:ApplyDamage(amount)
+	if self.IsInvincible then
+		return false
+	end
+	
+	if self.Humanoid then
+		self.Humanoid:TakeDamage(amount)
+		return true
+	end
+	
+	return false
+end
+
+function BaseCharacter:Destroy()
+	self.Player = nil
+	self.Model = nil
+	self.Humanoid = nil
+	self.RootPart = nil
+end
+
+return BaseCharacter
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="38">
+          <Properties>
+            <string name="Name">BaseEntity</string>
+            <string name="Source"><![CDATA[local BaseEntity = {}
+BaseEntity.__index = BaseEntity
+
+function BaseEntity.new(model, definition)
+	local self = setmetatable({}, BaseEntity)
+	
+	self.Model = model
+	self.Definition = definition or {}
+	self.RootPart = model.PrimaryPart or model:WaitForChild("HumanoidRootPart")
+	
+	self.Id = self.Definition.Id or model.Name
+	self.DisplayName = self.Definition.DisplayName or model.Name
+	self.StarRating = self.Definition.StarRation or 1
+	self.Weight = self.Definition.Weight or self.StarRating
+	
+	self.Attributes = self.Definition.Attributes or {}
+	
+	local stats = self.Definition.Stats or {}
+	
+	self.IsActive = false
+	self.Damage = stats.Damage or 10
+	self.AttackRange = stats.AttackRange or 10
+	self.AttackInterval = stats.AttackInterval or 1.5
+	self.MoveSpeed = stats.MoveSpeed or 10
+	
+	self.LastAttackTime = 0
+	self.TargetPlayer = nil
+	
+	self.SpawnCFrame = self.RootPart.CFrame
+	
+	return self
+end
+
+function BaseEntity:SetActive(state)
+	self.IsActive = state
+	
+	if not state then
+		self.TargetPlayer = nil
+	end
+end
+
+function BaseEntity:HasAttribute(attributeName)
+	for _, value in ipairs(self.Attributes) do
+		if value == attributeName then
+			return true
+		end
+	end
+	
+	return false
+end
+
+function BaseEntity:CanAttack()
+	return os.clock() - self.LastAttackTime >= self.AttackInterval
+end
+
+function BaseEntity:MarkAttack()
+	self.LastAttackTime = os.clock()
+end
+
+function BaseEntity:GetPosition()
+	if self.RootPart then
+		return self.RootPart.Position
+	end
+	
+	return nil
+end
+
+function BaseEntity:SetTarget(player)
+	self.TargetPlayer = player
+end
+
+function BaseEntity:GetTarget()
+	return self.TargetPlayer
+end
+
+function BaseEntity:MoveToward(position, deltaTime)
+	if not self.RootPart or not position then
+		return
+	end
+	
+	local currentPosition = self.RootPart.Position
+	local offset = position - currentPosition
+	local distance = offset.Magnitude
+	
+	if distance <= 0.01 then
+		return
+	end
+	
+	local stopDistance = math.max(self.AttackRange * 0.5, 2)
+	if distance <= stopDistance then
+		return
+	end
+	
+	local direction = offset.Unit
+	local moveStep = math.min(distance - stopDistance, self.MoveSpeed * deltaTime)
+	if moveStep <= 0 then
+		return
+	end
+	
+	local nextPosition = currentPosition + direction * moveStep
+	
+	self.RootPart.CFrame = CFrame.new(nextPosition, position)
+end
+
+function BaseEntity:ResetToSpawn()
+	if self.RootPart then
+		self.RootPart.CFrame = self.SpawnCFrame
+	end
+	
+	self.TargetPlayer = nil
+	self.LastAttackTime = 0
+end
+
+function BaseEntity:Destroy()
+	self.Model = nil
+	self.Definition = nil
+	self.RootPart = nil
+	self.TargetPlayer = nil
+end
+
+return BaseEntity
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="39">
+          <Properties>
+            <string name="Name">BaseObjective</string>
+            <string name="Source"><![CDATA[local BaseObjective = {}
+BaseObjective.__index = BaseObjective
+
+function BaseObjective.new(instance, definition)
+	local self = setmetatable({}, BaseObjective)
+	
+	self.Instance = instance
+	self.Definition = definition or {}
+	
+	self.Id = self.Definition.Id or instance.Name
+	self.DisplayName = self.Definition.DisplayName or instance.Name
+	self.Type = self.Definition.Type or "Unknown"
+	self.Phase = self.Definition.Phase or "None"
+	self.Shared = self.Definition.Shared == true
+	self.StartsEnabled = self.Definition.StartsEnabled == true
+	self.MaxProgress = self.Definition.MaxProgress or 1
+	self.ChargeRate = self.Definition.ChargeRate or 1
+	
+	self.Progress = 0
+	self.LastLoggedProgressStep = -1
+	self.IsComplete = false
+	self.IsEnabled = self.StartsEnabled
+	
+	return self
+end
+
+function BaseObjective:SetEnabled(state)
+	self.IsEnabled = state
+end
+
+function BaseObjective:CanInteract()
+	return self.IsEnabled and not self.IsComplete
+end
+
+function BaseObjective:AddProgress(amount)
+	if not self:CanInteract() then
+		return false
+	end
+	
+	self.Progress += amount
+	
+	if self.Progress >= self.MaxProgress then
+		self.Progress = self.MaxProgress
+		self.IsComplete = true
+	end
+	
+	return true
+end
+
+function BaseObjective:GetProgressAlpha()
+	if self.MaxProgress <= 0 then
+		return 0
+	end
+	
+	return self.Progress / self.MaxProgress
+end
+
+function BaseObjective:Destroy()
+	self.Instance = nil
+	self.Definition = nil
+end
+
+return BaseObjective
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="40">
+        <Properties>
+          <string name="Name">Managers</string>
+        </Properties>
+        <Item class="ModuleScript" referent="41">
+          <Properties>
+            <string name="Name">RoundManager</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
+local RoundOutcome = require(ReplicatedStorage.Shared.Enums.RoundOutcome)
+local RoundConfig = require(ReplicatedStorage.Shared.Data.RoundConfig)
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local RoundManager = {}
+RoundManager.Name = "RoundManager"
+
+function RoundManager:Init(services)
+	self.Services = services
+	self.CurrentPhase = GamePhase.Lobby
+	self.CurrentOutcome = RoundOutcome.None
+	self.TimeLeft = 0
+	self.IsRunning = false
+	self.SkipPhase = false
+
+	self.ActivePlayers = {}
+	self.RoundStates = {}
+end
+
+function RoundManager:Start()
+	DebugLog:Log("Round", "[RoundManager] Started")
+
+	if self.IsRunning then
+		return
+	end
+
+	self.IsRunning = true
+
+	task.spawn(function()
+		self:RunLoop()
+	end)
+end
+
+function RoundManager:SetPhase(phase, duration)
+	self.CurrentPhase = phase
+	self.TimeLeft = duration or 0
+
+	DebugLog:Log("Round", string.format("[RoundManager] Phase -> %s (%ds)", phase, self.TimeLeft))
+
+	if phase == GamePhase.Lobby then
+		if self.Services.InteractionService then
+			self.Services.InteractionService:StopAllInteractions("LobbyReset")
+		end
+		if self.Services.ObjectiveService then
+			self.Services.ObjectiveService:ResetObjectives()
+		end
+		self:ClearRound()
+		for _, player in ipairs(self.Services.PlayerService:GetPlayers()) do
+			self:ApplyCurrentPhaseStateToPlayer(player)
+		end
+		self.Services.SpawnService:TeleportAllPlayersToLobby()
+		self.Services.EntityService:SetAllEntitiesActive(false)
+
+	elseif phase == GamePhase.Preparation then
+		self:BuildRoundRoster()
+		self.Services.SpawnService:TeleportPlayersToReception(self.ActivePlayers)
+		self.Services.EntityService:SetAllEntitiesActive(false)
+		for _, player in ipairs(self.ActivePlayers) do
+			self:ApplyCurrentPhaseStateToPlayer(player)
+		end
+
+	elseif phase == GamePhase.Reception then
+		self.Services.EntityService:SetAllEntitiesActive(true)
+		for _, player in ipairs(self.ActivePlayers) do
+			self:ApplyCurrentPhaseStateToPlayer(player)
+		end
+
+	elseif phase == GamePhase.Results then
+		if self.Services.InteractionService then
+			self.Services.InteractionService:StopAllInteractions("Results")
+		end
+		self.Services.EntityService:SetAllEntitiesActive(false)
+		for _, player in ipairs(self.ActivePlayers) do
+			self:ApplyCurrentPhaseStateToPlayer(player)
+		end
+		
+	end
+
+	local roundStateChanged = self.Services.RemoteRegistry:GetRemote(RemoteNames.RoundStateChanged)
+	if roundStateChanged then
+		roundStateChanged:FireAllClients({
+			Phase = self.CurrentPhase,
+			TimeLeft = self.TimeLeft,
+			Outcome = self.CurrentOutcome,
+		})
+	end
+
+	self:BroadcastTimer()
+end
+
+function RoundManager:BroadcastTimer()
+	local roundTimerUpdated = self.Services.RemoteRegistry:GetRemote(RemoteNames.RoundTimerUpdated)
+	if roundTimerUpdated then
+		roundTimerUpdated:FireAllClients({
+			Phase = self.CurrentPhase,
+			TimeLeft = self.TimeLeft,
+			Outcome = self.CurrentOutcome,
+		})
+	end
+end
+
+function RoundManager:RunPhase(phase, duration)
+	self.SkipPhase = false
+	self:SetPhase(phase, duration)
+
+	while self.TimeLeft > 0 do
+		if self.SkipPhase then
+			self.TimeLeft = 0
+			self:BroadcastTimer()
+			break
+		end
+
+		task.wait(1)
+		self.TimeLeft -= 1
+		self:BroadcastTimer()
+	end
+
+	if phase == GamePhase.Reception and not self.SkipPhase then
+		self:OnReceptionTimerExpired()
+	end
+end
+
+function RoundManager:RunLoop()
+	while true do
+		self:RunPhase(GamePhase.Lobby, RoundConfig.IntermissionDuration)
+		self:RunPhase(GamePhase.Voting, RoundConfig.VotingDuration)
+		self:RunPhase(GamePhase.Preparation, RoundConfig.PreparationDuration)
+		self:RunPhase(GamePhase.Reception, RoundConfig.ReceptionDuration) -- Temporary test value!
+		self:RunPhase(GamePhase.Results, RoundConfig.ResultsDuration)
+	end
+end
+
+function RoundManager:BuildRoundRoster()
+	table.clear(self.ActivePlayers)
+	table.clear(self.RoundStates)
+
+	local players = self.Services.PlayerService:GetPlayers()
+
+	for _, player in ipairs(players) do
+		local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+
+		if character and character:IsAlive() then
+			table.insert(self.ActivePlayers, player)
+
+			self.RoundStates[player] = {
+				IsActive = true,
+				IsAlive = true,
+				HasEscaped = false,
+				IsEliminated = false,
+			}
+		end
+	end
+
+	DebugLog:Log("Round", string.format("[RoundManager] Built roster with %d active players", #self.ActivePlayers))
+end
+
+function RoundManager:ClearRound()
+	table.clear(self.ActivePlayers)
+	table.clear(self.RoundStates)
+	self.CurrentOutcome = RoundOutcome.None
+end
+
+function RoundManager:GetRoundState(player)
+	return self.RoundStates[player]
+end
+
+function RoundManager:GetActivePlayers()
+	return self.ActivePlayers
+end
+
+function RoundManager:IsPlayerActive(player)
+	local roundState = self.RoundStates[player]
+	return roundState ~= nil and roundState.IsActive == true
+end
+
+function RoundManager:IsReceptionActive()
+	return self.CurrentPhase == GamePhase.Reception
+end
+
+function RoundManager:GetCurrentPhase()
+	return self.CurrentPhase
+end
+
+function RoundManager:IsInvinciblePhase(phase)
+	return phase == GamePhase.Preparation or phase == GamePhase.Results
+end
+
+function RoundManager:ApplyCurrentPhaseStateToPlayer(player)
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if not character then
+		return
+	end
+	
+	local isActivePlayer = self:IsPlayerActive(player)
+	local shouldBeInvincible = isActivePlayer and self:IsInvinciblePhase(self.CurrentPhase)
+	local shouldBeFrozen = isActivePlayer and (self.CurrentPhase == GamePhase.Preparation or self.CurrentPhase == GamePhase.Results)
+	
+	character:SetInvincible(shouldBeInvincible)
+	
+	if shouldBeFrozen then
+		character:Freeze()
+	else
+		character:Unfreeze()
+	end
+end
+
+function RoundManager:FreezeActivePlayers()
+	for _, player in ipairs(self.ActivePlayers) do
+		local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+		if character then
+			character:Freeze()
+		end
+	end
+end
+
+function RoundManager:UnfreezeActivePlayers()
+	for _, player in ipairs(self.ActivePlayers) do
+		local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+		if character then
+			character:Unfreeze()
+		end
+	end
+end
+
+function RoundManager:SetPlayerEliminated(player)
+	if not self:IsReceptionActive() then
+		return
+	end
+
+	local roundState = self.RoundStates[player]
+	if not roundState then
+		return
+	end
+
+	roundState.IsAlive = false
+	roundState.IsEliminated = true
+
+	DebugLog:Log("Round", "[RoundManager] Eliminated", player.Name)
+	DebugLog:Log("Round", "[RoundManager] Alive remaining:", self:GetAliveCount())
+
+	self:CheckRoundEnd()
+end
+
+function RoundManager:SetPlayerEscaped(player)
+	if not self:IsReceptionActive() then
+		return
+	end
+	
+	local roundState = self.RoundStates[player]
+	if not roundState then
+		return
+	end
+
+	roundState.IsAlive = false
+	roundState.HasEscaped = true
+
+	DebugLog:Log("Round", "[RoundManager] Escaped", player.Name)
+	DebugLog:Log("Round", "[RoundManager] Escaped count:", self:GetEscapedCount(), "/", self:GetRequiredEscapeCount())
+	DebugLog:Log("Round", "[RoundManager] Alive remaining:", self:GetAliveCount())
+
+	self:CheckRoundEnd()
+end
+
+function RoundManager:GetActivePlayerCount()
+	return #self.ActivePlayers
+end
+
+function RoundManager:GetRequiredEscapeCount()
+	local total = self:GetActivePlayerCount()
+	return math.floor(total / 2) + 1
+end
+
+function RoundManager:GetAliveCount()
+	local count = 0
+
+	for _, roundState in pairs(self.RoundStates) do
+		if roundState.IsAlive then
+			count += 1
+		end
+	end
+
+	return count
+end
+
+function RoundManager:GetEscapedCount()
+	local count = 0
+
+	for _, roundState in pairs(self.RoundStates) do
+		if roundState.HasEscaped then
+			count += 1
+		end
+	end
+
+	return count
+end
+
+function RoundManager:GetEliminatedCount()
+	local count = 0
+
+	for _, roundState in pairs(self.RoundStates) do
+		if roundState.IsEliminated then
+			count += 1
+		end
+	end
+
+	return count
+end
+
+function RoundManager:CheckRoundEnd()
+	if not self:IsReceptionActive() then
+		return
+	end
+
+	local aliveCount = self:GetAliveCount()
+	local escapedCount = self:GetEscapedCount()
+	local requiredEscapeCount = self:GetRequiredEscapeCount()
+	
+	if escapedCount >= requiredEscapeCount then
+		DebugLog:Log("Round", "[RoundManager] Escape threshold reached, Remnants win")
+		self:EndReception(RoundOutcome.RemnantsWin)
+		return
+	end
+
+	if aliveCount <= 0 then
+		local escapedCount = self:GetEscapedCount()
+		local outcome = escapedCount > 0 and RoundOutcome.RemnantsWin or RoundOutcome.EntitiesWin
+		DebugLog:Log("Round", "[RoundManager] No active players remain, ending round early.")
+		self:EndReception(outcome)
+	end
+end
+
+function RoundManager:EndReception(outcome)
+	if not self:IsReceptionActive() then
+		return
+	end
+
+	self.CurrentOutcome = outcome or RoundOutcome.None
+	self.SkipPhase = true
+
+	DebugLog:Log("Round", "[RoundManager] Reception ended with outcome:", self.CurrentOutcome)
+end
+
+function RoundManager:OnReceptionTimerExpired()
+	DebugLog:Log("Round", "[RoundManager] Reception timer expired")
+
+	local aliveCount = self:GetAliveCount()
+	local escapedCount = self:GetEscapedCount()
+
+	if aliveCount > 0 then
+		self:EndReception(RoundOutcome.Draw)
+	elseif escapedCount > 0 then
+		self:EndReception(RoundOutcome.RemnantsWin)
+	else
+		self:EndReception(RoundOutcome.EntitiesWin)
+	end
+end
+
+return RoundManager
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+      <Item class="Folder" referent="42">
+        <Properties>
+          <string name="Name">Services</string>
+        </Properties>
+        <Item class="ModuleScript" referent="43">
+          <Properties>
+            <string name="Name">CharacterService</string>
+            <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local BaseCharacter = require(ServerScriptService.Server.Classes.BaseCharacter)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local CharacterService = {}
+CharacterService.Name = "CharacterService"
+
+function CharacterService:Init(services)
+	self.Services = services
+	self.CharactersByPlayer = {}
+	self.CharactersByModel = {}
+end
+
+function CharacterService:Start()
+	for _, player in ipairs(Players:GetPlayers()) do
+		self:_connectPlayer(player)
+		
+		if player.Character then
+			self:_onCharacterAdded(player, player.Character)
+		end
+	end
+	
+	Players.PlayerAdded:Connect(function(player: Player)
+		self:_connectPlayer(player)
+	end)
+	
+	Players.PlayerRemoving:Connect(function(player)
+		self:_cleanupPlayer(player)
+	end)
+	
+	DebugLog:Log("Character", "[CharacterService] Started")
+end
+
+function CharacterService:_connectPlayer(player)
+	player.CharacterAdded:Connect(function(characterModel)
+		self:_onCharacterAdded(player, characterModel)
+	end)
+	
+	player.CharacterRemoving:Connect(function(characterModel)
+		self:_onCharacterRemoving(player, characterModel)
+	end)
+end
+
+function CharacterService:_onCharacterAdded(player, characterModel)
+	local oldCharacter = self.CharactersByPlayer[player]
+	if oldCharacter then
+		self:_removeCharacter(player, oldCharacter.Model)
+	end
+	
+	local character = BaseCharacter.new(player, characterModel)
+	self.CharactersByPlayer[player] = character
+	self.CharactersByModel[characterModel] = character
+	
+	local playerService = self.Services.PlayerService
+	if playerService then
+		playerService:SetAlive(player, true)
+	end
+
+	local roundManager = self.Services.RoundManager
+	if roundManager then
+		roundManager:ApplyCurrentPhaseStateToPlayer(player)
+	end
+	
+	character.Humanoid.Died:Connect(function()
+		if character.IsInvincible then
+			DebugLog:Log("Character", "[CharacterService] Ignoring death for invincible character", player.Name)
+			return
+		end
+		local livePlayerService = self.Services.PlayerService
+		if livePlayerService then
+			livePlayerService:SetAlive(player, false)
+		end
+		
+		local liveRoundManager = self.Services.RoundManager
+		if liveRoundManager and liveRoundManager:IsPlayerActive(player) then
+			liveRoundManager:SetPlayerEliminated(player)
+		end
+		DebugLog:Log("Character", "[CharacterService] Character died for", player.Name)
+	end)
+	
+	DebugLog:Log("Character", "[CharacterService] Registered character for", player.Name)
+end
+
+function CharacterService:_onCharacterRemoving(player, characterModel)
+	self:_removeCharacter(player, characterModel)
+end
+
+function CharacterService:_removeCharacter(player, characterModel)
+	local character = self.CharactersByPlayer[player]
+	
+	if character then
+		character:Destroy()
+	end
+	
+	self.CharactersByPlayer[player] = nil
+	
+	if characterModel then
+		self.CharactersByModel[characterModel] = nil
+	end
+	
+	local playerService = self.Services.PlayerService
+	if playerService then
+		playerService:SetAlive(player, false)
+	end
+	
+	DebugLog:Log("Character", "[CharacterService] Removed character for", player.Name)
+end
+
+function CharacterService:FreezeAll()
+	for _, character in pairs(self.CharactersByPlayer) do
+		character:Freeze()
+	end
+end
+
+function CharacterService:UnfreezeAll()
+	for _, character in pairs(self.CharactersByPlayer) do
+		character:Unfreeze()
+	end
+end
+
+function CharacterService:_cleanupPlayer(player)
+	local character = self.CharactersByPlayer[player]
+	if character then
+		self:_removeCharacter(player, character.Model)
+	end
+end
+
+function CharacterService:GetCharacterByPlayer(player)
+	return self.CharactersByPlayer[player]
+end
+
+function CharacterService:GetCharacterByModel(model)
+	return self.CharactersByModel[model]
+end
+
+return CharacterService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="44">
+          <Properties>
+            <string name="Name">EntityService</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local BaseEntity = require(ServerScriptService.Server.Classes.BaseEntity)
+local EntityDefinitions = require(ReplicatedStorage.Shared.Data.EntityDefinitions)
+local EntityAttributes = require(ReplicatedStorage.Shared.Enums.EntityAttributes)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local EntityService = {}
+EntityService.Name = "EntityService"
+
+function EntityService:Init(services)
+	self.Services = services
+	self.Entities = {}
+	self.UpdateInterval = 0.2
+
+	self.EntitiesFolder = Workspace:WaitForChild("Entities")
+end
+
+function EntityService:Start()
+	self:_registerExistingEntities()
+
+	task.spawn(function()
+		self:_runEntityLoop()
+	end)
+
+	DebugLog:Log("Entity", "[EntityService] Started")
+end
+
+function EntityService:_registerExistingEntities()
+	for _,model in ipairs(self.EntitiesFolder:GetChildren()) do
+		if model:IsA("Model") and model.PrimaryPart then
+			local definition = EntityDefinitions[model.Name]
+			local entity = BaseEntity.new(model, definition)
+
+			table.insert(self.Entities, entity)
+
+			DebugLog:Log("Entity", string.format(
+				"[EntityService] Registered entity: %s | Stars: %d | Weight: %d",
+				entity.DisplayName,
+				entity.StarRating,
+				entity.Weight
+			))
+		end
+	end
+end
+
+function EntityService:_runEntityLoop()
+	while true do
+		for _, entity in ipairs(self.Entities) do
+			if entity.IsActive then
+				self:_updateEntity(entity, self.UpdateInterval)
+			end
+		end
+
+		task.wait(self.UpdateInterval)
+	end
+end
+
+function EntityService:_updateEntity(entity, deltaTime)
+	local targetCharacter = self:_findNearestCharacter(entity)
+	if targetCharacter then
+		entity:SetTarget(targetCharacter.Player)
+		
+		if entity:HasAttribute(EntityAttributes.Chase) then
+			entity:MoveToward(targetCharacter.RootPart.Position, deltaTime)
+		end
+		
+		if entity:CanAttack() then
+			local distance = (targetCharacter.RootPart.Position - entity:GetPosition()).Magnitude
+			if distance <= entity.AttackRange then
+				local didDamage = targetCharacter:ApplyDamage(entity.Damage)
+				if didDamage then
+					local targetPlayer = targetCharacter.Player
+					targetCharacter:ApplyTemporarySpeedMultiplier("OnHitHaste", 1.45, 1.5)
+					
+					local interactionService = self.Services.InteractionService
+					if interactionService and targetPlayer and interactionService:IsInteracting(targetPlayer) then
+						interactionService:InterruptInteraction(targetPlayer, "Damaged")
+					end
+				end
+				entity:MarkAttack()
+				
+				local player = targetCharacter.Player
+				local name = player and player.Name or "Unknown"
+				DebugLog:Log("Entity", string.format(
+					"[EntityService] %s hit %s for %d",
+					entity.Model.Name,
+					name,
+					entity.Damage
+				))
+			end
+		end
+	else
+		entity:SetTarget(nil)
+	end
+end
+
+function EntityService:_findNearestCharacter(entity)
+	local roundManager = self.Services.RoundManager
+	local characterService = self.Services.CharacterService
+
+	if not roundManager or not characterService then
+		return nil
+	end
+
+	local entityPosition = entity:GetPosition()
+	if not entityPosition then
+		return nil
+	end
+
+	local nearestCharacter = nil
+	local nearestDistance = math.huge
+
+	for _, player in ipairs(roundManager:GetActivePlayers()) do
+		local roundState = roundManager:GetRoundState(player)
+		if roundState and roundState.IsAlive then
+			local character = characterService:GetCharacterByPlayer(player)
+			if character and character.RootPart then
+				local distance = (character.RootPart.Position - entityPosition).Magnitude
+				if distance < nearestDistance then
+					nearestDistance = distance
+					nearestCharacter = character
+				end
+			end
+		end
+	end
+
+	return nearestCharacter
+end
+
+function EntityService:SetAllEntitiesActive(state)
+	for _, entity in ipairs(self.Entities) do
+		entity:SetActive(state)
+		
+		if not state then
+			entity:ResetToSpawn()
+		end
+	end
+
+	DebugLog:Log("Entity", "[EntityService] Entities active:", state)
+end
+
+return EntityService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="45">
+          <Properties>
+            <string name="Name">EscapeService</string>
+            <string name="Source"><![CDATA[local Workspace = game:GetService("Workspace")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local EscapeService = {}
+EscapeService.Name = "EscapeService"
+
+function EscapeService:Init(services)
+	self.Services = services
+	self.EscapeZone = Workspace:WaitForChild("EscapeZone")
+	self.TouchDebounce = {}
+end
+
+function EscapeService:Start()
+	self.EscapeZone.Touched:Connect(function(hit)
+		self:_onEscapeZoneTouched(hit)
+	end)
+	
+	DebugLog:Log("Round", "[EscapeService] Started")
+end
+
+function EscapeService:_onEscapeZoneTouched(hit)
+	local characterModel = hit and hit.Parent
+	if not characterModel then
+		return
+	end
+	
+	local player = Players:GetPlayerFromCharacter(characterModel)
+	if not player then
+		return
+	end
+	
+	if self.TouchDebounce[player] then
+		return
+	end
+	
+	self.TouchDebounce[player] = true
+	
+	self:TryEscapePlayer(player)
+	
+	task.delay(1, function()
+		self.TouchDebounce[player] = nil
+	end)
+end
+
+function EscapeService:TryEscapePlayer(player)
+	local roundManager = self.Services.RoundManager
+	if not roundManager then
+		return
+	end
+	
+	if not roundManager:IsReceptionActive() then
+		return
+	end
+	
+	if not roundManager:IsPlayerActive(player) then
+		return
+	end
+	
+	local roundState = roundManager:GetRoundState(player)
+	if not roundState or not roundState.IsAlive then
+		return
+	end
+	
+	roundManager:SetPlayerEscaped(player)
+
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if character then
+		character:Freeze()
+		if character.RootPart then
+			character.RootPart.CFrame = CFrame.new(0, -1000, 0) -- Temporary extraction method..
+		end
+	end
+
+	DebugLog:Log("Round", "[EscapeService] Player escaped:", player.Name)
+end
+
+return EscapeService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="46">
+          <Properties>
+            <string name="Name">InteractionService</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local InteractableType = require(ReplicatedStorage.Shared.Enums.InteractableType)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local InteractionService = {}
+InteractionService.Name = "InteractionService"
+
+function InteractionService:Init(services)
+	self.Services = services
+	self.ActiveInteractions = {}
+end
+
+function InteractionService:Start()
+	self.InteractionStateRemote = self.Services.RemoteRegistry:GetRemote(RemoteNames.InteractionStateChanged)
+	self.UpdateInterval = 0.1
+	
+	local requestInteract = self.Services.RemoteRegistry:GetRemote(RemoteNames.RequestInteract)
+	
+	requestInteract.OnServerEvent:Connect(function(player, isStarting)
+		DebugLog:Log("Interaction", string.format("[InteractionService] Remote received from %s (start=%s)", player.Name, tostring(isStarting)))
+		if isStarting then
+			self:StartInteraction(player)
+		else
+			self:StopInteraction(player)
+		end
+	end)
+	
+	task.spawn(function()
+		self:_runInteractionLoop()
+	end)
+	
+	DebugLog:Log("Interaction", "[InteractionService] Started")
+end
+
+function InteractionService:StartInteraction(player)
+	local roundManager = self.Services.RoundManager
+	if not roundManager or not roundManager:IsReceptionActive() then
+		DebugLog:Log("Interaction", string.format("[InteractionService] Ignored start for %s: reception inactive", player.Name))
+		return
+	end
+	
+	local target = self:FindBestInteractable(player)
+	if not target then
+		DebugLog:Log("Interaction", string.format("[InteractionService] Ignored start for %s: no valid target", player.Name))
+		return
+	end
+	
+	self.ActiveInteractions[player] = {
+		Target = target,
+	}
+	
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if character then
+		character:SetSpeedMultiplier("InteractionSlow", 0.5)
+	end
+	
+	self.InteractionStateRemote:FireClient(player, {
+		State = "Start",
+		Target = target.DisplayName,
+		Progress = target.Progress or 0,
+		Max = target.MaxProgress or 1,
+	})
+	
+	DebugLog:Log("Interaction", string.format("[InteractionService] %s started interacting with %s", player.Name, target.DisplayName))
+end
+
+function InteractionService:StopInteraction(player)
+	if self.ActiveInteractions[player] then
+		local target = self.ActiveInteractions[player].Target
+		local name = target and target.DisplayName or "Unknown"
+		
+		local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+		if character then
+			character:SetSpeedMultiplier("InteractionSlow", nil)
+		end
+		
+		self.InteractionStateRemote:FireClient(player, {
+			State = "Stop"
+		})
+		
+		DebugLog:Log("Interaction", string.format("[InteractionService] %s stopped interacting with %s", player.Name, name))
+	end
+	
+	self.ActiveInteractions[player] = nil
+end
+
+function InteractionService:InterruptInteraction(player, reason)
+	if not self.ActiveInteractions[player] then
+		return false
+	end
+	
+	self:StopInteraction(player)
+	DebugLog:Log("Interaction", string.format("[InteractionService] %s interaction interrupted (%s)", player.Name, tostring(reason or "Unknown")))
+	return true
+end
+
+function InteractionService:StopAllInteractions(reason)
+	for player in pairs(self.ActiveInteractions) do
+		self:InterruptInteraction(player, reason or "StoppedAll")
+	end
+end
+
+function InteractionService:IsInteracting(player)
+	return self.ActiveInteractions[player] ~= nil
+end
+
+function InteractionService:FindBestInteractable(player)
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.RootPart then
+		return nil
+	end
+	
+	local playerPosition = character.RootPart.Position
+	local bestTarget = nil
+	local bestDistance = math.huge
+	
+	for _, objective in ipairs(self.Services.ObjectiveService:GetObjectives()) do
+		if objective.Type == InteractableType.Objective or objective.Type == "MapObjective" then
+			if objective:CanInteract() and objective.Instance then
+				local distance = (objective.Instance.Position - playerPosition).Magnitude
+				if distance <= 12 and distance < bestDistance then
+					bestTarget = objective
+					bestDistance = distance
+				end
+			end
+		end
+	end
+	
+	return bestTarget
+end
+
+function InteractionService:_runInteractionLoop()
+	while true do
+		for player, interaction in pairs(self.ActiveInteractions) do
+			self:_updateInteraction(player, interaction)
+		end
+		
+		task.wait(self.UpdateInterval)
+	end
+end
+
+function InteractionService:_updateInteraction(player, interaction)
+	local target = interaction.Target
+	
+	if target.IsComplete then
+		self.InteractionStateRemote:FireClient(player, {
+			State = "Complete"
+		})
+		self:StopInteraction(player)
+		return
+	end
+	
+	if not target or target.IsComplete then
+		self:StopInteraction(player)
+		return
+	end
+	
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.RootPart then
+		self:StopInteraction(player)
+		return
+	end
+	
+	local distance = (target.Instance.Position - character.RootPart.Position).Magnitude
+	if distance > 12 then
+		DebugLog:Log("Interaction", string.format("[InteractionService] %s moved too far from %s", player.Name, target.DisplayName))
+		self:StopInteraction(player)
+		return
+	end
+	
+	local amount = target.ChargeRate * self.UpdateInterval
+	local progressed = self.Services.ObjectiveService:ProgressObjective(target, amount)
+	
+	self.InteractionStateRemote:FireClient(player, {
+		State = "Update",
+		Target = target.DisplayName,
+		Progress = target.Progress,
+		Max = target.MaxProgress or 1,
+	})
+	
+	if not progressed or target.IsComplete then
+		self:StopInteraction(player)
+	end
+end
+
+return InteractionService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="47">
+          <Properties>
+            <string name="Name">ObjectiveService</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local ServerScriptService = game:GetService("ServerScriptService")
+
+local BaseObjective = require(ServerScriptService.Server.Classes.BaseObjective)
+local ObjectiveDefinitions = require(ReplicatedStorage.Shared.Data.ObjectiveDefinitions)
+local ObjectivePhase = require(ReplicatedStorage.Shared.Enums.ObjectivePhase)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local ObjectiveService = {}
+ObjectiveService.Name = "ObjectiveService"
+
+function ObjectiveService:Init(services)
+	self.Services = services
+	self.Objectives = {}
+	
+	self.ObjectivesFolder = Workspace:WaitForChild("Objectives")
+end
+
+function ObjectiveService:Start()
+	self:_registerExistingObjectives()
+	DebugLog:Log("Objectives", "[ObjectiveService] Started")
+end
+
+function ObjectiveService:_registerExistingObjectives()
+	for _, instance in ipairs(self.ObjectivesFolder:GetChildren()) do
+		local definition = ObjectiveDefinitions[instance.Name]
+		local objective = BaseObjective.new(instance, definition)
+		
+		table.insert(self.Objectives, objective)
+		
+		DebugLog:Log("Objectives", string.format(
+			"[ObjectiveService] Registered objective: %s | Type: %s | Phase: %s",
+			objective.DisplayName,
+			objective.Type,
+			objective.Phase
+		))
+	end
+end
+
+function ObjectiveService:GetObjectives()
+	return self.Objectives
+end
+
+function ObjectiveService:GetObjectivesByPhase(objectivePhase)
+	local results = {}
+	
+	for _, objective in ipairs(self.Objectives) do
+		if objective.Phase == objectivePhase then
+			table.insert(results, objective)
+		end
+	end
+	
+	return results
+end
+
+function ObjectiveService:SetPhaseEnabled(objectivePhase, enabled)
+	for _, objective in ipairs(self.Objectives) do
+		if objective.Phase == objectivePhase then
+			objective:SetEnabled(enabled)
+		end
+	end
+	
+	DebugLog:Log("Objectives", string.format("[ObjectiveService] Set phase '%s' enabled = %s", objectivePhase, tostring(enabled)))
+end
+
+function ObjectiveService:ResetObjectives()
+	for _, objective in ipairs(self.Objectives) do
+		objective.Progress = 0
+		objective.LastLoggedProgressStep = -1
+		objective.IsComplete = false
+		objective.IsEnabled = objective.StartsEnabled
+	end
+	
+	DebugLog:Log("Objectives", "[ObjectiveService] Objectives reset")
+end
+
+function ObjectiveService:TryProgressObjectiveByName(name, amount)
+	for _, objective in ipairs(self.Objectives) do
+		if objective.Id == name or objective.DisplayName == name or (objective.Instance and objective.Instance.Name == name) then
+			return self:ProgressObjective(objective, amount)
+		end
+	end
+	
+	return false
+end
+
+function ObjectiveService:ProgressObjective(objective, amount)
+	if not objective or objective.IsComplete then
+		return false
+	end
+	
+	local succeeded = objective:AddProgress(amount)
+	if not succeeded then
+		return false
+	end
+
+	local currentProgressStep = math.floor(objective.Progress)
+	if currentProgressStep > (objective.LastLoggedProgressStep or -1) then
+		objective.LastLoggedProgressStep = currentProgressStep
+		DebugLog:Log("ObjectiveProgress", string.format(
+			"[ObjectiveService] %s progress: %1.f / %1.f",
+			objective.DisplayName,
+			objective.Progress,
+			objective.MaxProgress
+		))
+	end
+	
+	if objective.IsComplete then
+		DebugLog:Log("Objectives", "[ObjectiveService] Completed objective:", objective.DisplayName)
+		
+		local roundManager = self.Services.RoundManager
+		if roundManager and roundManager.OnObjectiveCompleted then
+			roundManager:OnObjectiveCompleted(objective)
+		end
+	end
+	
+	return true
+end
+
+return ObjectiveService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="48">
+          <Properties>
+            <string name="Name">PlayerService</string>
+            <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local PlayerService = {}
+PlayerService.Name = "PlayerService"
+
+function PlayerService:Init()
+	self.PlayerStates = {}
+end
+
+function PlayerService:Start()
+	for _, player in ipairs(Players:GetPlayers()) do
+		self:_onPlayerAdded(player)
+	end
+	
+	Players.PlayerAdded:Connect(function(player)
+		self:_onPlayerAdded(player)
+	end)
+	
+	Players.PlayerRemoving:Connect(function(player)
+		self:_onPlayerRemoving(player)
+	end)
+	
+	DebugLog:Log("Player", "[PlayerService] Started")
+end
+
+function PlayerService:_onPlayerAdded(player)
+	self.PlayerStates[player] = {
+		IsAlive = true,
+		HasEscaped = false,
+		IsLoaded = true,
+	}
+	DebugLog:Log("Player", "[PlayerService] Added", player.Name)
+end
+
+function PlayerService:_onPlayerRemoving(player)
+	self.PlayerStates[player] = nil
+	DebugLog:Log("Player", "[PlayerService] Removed", player.Name)
+end
+
+function PlayerService:GetPlayerState(player)
+	return self.PlayerStates[player]
+end
+
+function PlayerService:GetPlayers()
+	local players = {}
+	
+	for player in pairs(self.PlayerStates) do
+		table.insert(players, player)
+	end
+	
+	return players
+end
+
+function PlayerService:SetAlive(player, isAlive)
+	local state = self.PlayerStates[player]
+	if state then
+		state.IsAlive = isAlive
+	end
+end
+
+return PlayerService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="49">
+          <Properties>
+            <string name="Name">RemoteRegistry</string>
+            <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local RemoteRegistry = {}
+RemoteRegistry.Name = "RemoteRegistry"
+
+function RemoteRegistry:Init()
+	local sharedFolder = ReplicatedStorage:WaitForChild("Shared")
+	local remotesFolder = sharedFolder:FindFirstChild("Remotes")
+	if not remotesFolder then
+		remotesFolder = Instance.new("Folder")
+		remotesFolder.Name = "Remotes"
+		remotesFolder.Parent = sharedFolder
+	end
+	
+	for _, remoteName in pairs(RemoteNames) do
+		if not remotesFolder:FindFirstChild(remoteName) then
+			local remote = Instance.new("RemoteEvent")
+			remote.Name = remoteName
+			remote.Parent = remotesFolder
+		end
+	end
+	
+	self.RemotesFolder = remotesFolder
+end
+
+function RemoteRegistry:Start()
+	DebugLog:Log("Boot", "[RemoteRegistry] Started")
+end
+
+function RemoteRegistry:GetRemote(name)
+	return self.RemotesFolder:FindFirstChild(name)
+end
+
+return RemoteRegistry
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="50">
+          <Properties>
+            <string name="Name">SpawnService</string>
+            <string name="Source"><![CDATA[local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local SpawnService = {}
+SpawnService.Name = "SpawnService"
+
+function SpawnService:Init(services)
+	self.Services = services
+	
+	local spawnsFolder = Workspace:WaitForChild("Spawns")
+	self.LobbySpawn = spawnsFolder:WaitForChild("LobbySpawn")
+	self.ReceptionSpawnsFolder = spawnsFolder:WaitForChild("ReceptionSpawns")
+end
+
+function SpawnService:Start()
+	DebugLog:Log("Spawn", "[SpawnService] Started")
+end
+
+function SpawnService:TeleportPlayerToLobby(player)
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.RootPart then
+		return
+	end
+	
+	character.RootPart.CFrame = self.LobbySpawn.CFrame + Vector3.new(0,3,0)
+end
+
+function SpawnService:TeleportPlayerToReception(player)
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.RootPart then
+		return
+	end
+	
+	local spawnPart = self:GetRandomReceptionSpawn()
+	if not spawnPart then
+		warn("[SpawnService] No reception spawn found!")
+		return
+	end
+	
+	character.RootPart.CFrame = spawnPart.CFrame + Vector3.new(0, 3, 0)
+end
+
+function SpawnService:GetRandomReceptionSpawn()
+	local spawns = self.ReceptionSpawnsFolder:GetChildren()
+	if #spawns == 0 then
+		return nil
+	end
+	
+	return spawns[math.random(1, #spawns)]
+end
+
+function SpawnService:TeleportPlayersToLobby(players)
+	for _, player in ipairs(players) do
+		self:TeleportPlayerToLobby(player)
+	end
+end
+
+function SpawnService:TeleportPlayersToReception(players)
+	for _, player in ipairs(players) do
+		self:TeleportPlayerToReception(player)
+	end
+end
+
+function SpawnService:TeleportAllPlayersToLobby()
+	for player in pairs(self.Services.PlayerService.PlayerStates) do
+		self:TeleportPlayerToLobby(player)
+	end
+end
+
+function SpawnService:TeleportAllPlayersToReception()
+	for player in pairs(self.Services.PlayerService.PlayerStates) do
+		self:TeleportPlayerToReception(player)
+	end
+end
+
+return SpawnService
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="ModuleScript" referent="51">
+          <Properties>
+            <string name="Name">WeaponService</string>
+            <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
+local WeaponAction = require(ReplicatedStorage.Shared.Enums.WeaponAction)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local WeaponService = {}
+WeaponService.Name = "WeaponService"
+
+function WeaponService:Init(services)
+	self.Services = services
+	self.PlayerWeapons = {}
+end
+
+function WeaponService:Start()
+	self.RequestWeaponActionRemote = self.Services.RemoteRegistry:GetRemote(RemoteNames.RequestWeaponAction)
+	self.WeaponStateChangedRemote = self.Services.RemoteRegistry:GetRemote(RemoteNames.WeaponStateChanged)
+
+	self.RequestWeaponActionRemote.OnServerEvent:Connect(function(player, actionName)
+		self:HandleWeaponAction(player, actionName)
+	end)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		self:EquipDefaultWeapon(player)
+	end
+
+	Players.PlayerAdded:Connect(function(player)
+		self:EquipDefaultWeapon(player)
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		self.PlayerWeapons[player] = nil
+	end)
+
+	DebugLog:Log("Weapon", "[WeaponService] Started")
+end
+
+function WeaponService:HandleWeaponAction(player, actionName)
+	local weaponState = self.PlayerWeapons[player]
+	if not weaponState then
+		return
+	end
+
+	local playerState = self.Services.PlayerService and self.Services.PlayerService:GetPlayerState(player)
+	if not playerState or not playerState.IsAlive then
+		DebugLog:Log("Weapon", string.format("[WeaponService] Ignored %s from %s: player not alive", tostring(actionName), player.Name))
+		return
+	end
+
+	if actionName == WeaponAction.Fire then
+		self:FireWeapon(player, weaponState)
+	elseif actionName == WeaponAction.Reload then
+		self:ReloadWeapon(player, weaponState)
+	end
+end
+
+function WeaponService:EquipDefaultWeapon(player)
+	local definition = WeaponDefinitions.Glock45
+	if not definition then
+		return
+	end
+
+	self.PlayerWeapons[player] = {
+		WeaponId = definition.Id,
+		AmmoInMagazine = definition.MagazineSize,
+		ReserveAmmo = definition.ReserveAmmo,
+		IsReloading = false,
+		LastFireTime = 0,
+		ReloadToken = 0,
+	}
+
+	self:SendWeaponState(player)
+	DebugLog:Log("Weapon", string.format("[WeaponService] Equipped %s for %s", definition.Id, player.Name))
+end
+
+function WeaponService:FireWeapon(player, weaponState)
+	local definition = WeaponDefinitions[weaponState.WeaponId]
+	if not definition then
+		return
+	end
+
+	if weaponState.IsReloading then
+		DebugLog:Log("Weapon", string.format("[WeaponService] Ignored fire from %s: reload in progress", player.Name))
+		return
+	end
+
+	local now = os.clock()
+	if now - weaponState.LastFireTime < definition.FireCooldown then
+		return
+	end
+
+	if weaponState.AmmoInMagazine <= 0 then
+		DebugLog:Log("Weapon", string.format("[WeaponService] Ignored fire from %s: empty magazine", player.Name))
+		return
+	end
+
+	weaponState.LastFireTime = now
+	weaponState.AmmoInMagazine -= 1
+
+	-- Hit detection and damage stay server-owned and can be layered in here later.
+	self:SendWeaponState(player)
+	DebugLog:Log(
+		"Weapon",
+		string.format(
+			"[WeaponService] %s fired %s (%d/%d)",
+			player.Name,
+			weaponState.WeaponId,
+			weaponState.AmmoInMagazine,
+			weaponState.ReserveAmmo
+		)
+	)
+end
+
+function WeaponService:ReloadWeapon(player, weaponState)
+	local definition = WeaponDefinitions[weaponState.WeaponId]
+	if not definition then
+		return
+	end
+
+	if weaponState.IsReloading then
+		return
+	end
+
+	if weaponState.AmmoInMagazine >= definition.MagazineSize then
+		return
+	end
+
+	if weaponState.ReserveAmmo <= 0 then
+		return
+	end
+
+	weaponState.IsReloading = true
+	weaponState.ReloadToken += 1
+	local reloadToken = weaponState.ReloadToken
+
+	self:SendWeaponState(player)
+	DebugLog:Log("Weapon", string.format("[WeaponService] %s started reload for %s", player.Name, weaponState.WeaponId))
+
+	task.delay(definition.ReloadDuration, function()
+		local liveWeaponState = self.PlayerWeapons[player]
+		if not liveWeaponState or liveWeaponState.ReloadToken ~= reloadToken then
+			return
+		end
+
+		local missingAmmo = definition.MagazineSize - liveWeaponState.AmmoInMagazine
+		local ammoToLoad = math.min(missingAmmo, liveWeaponState.ReserveAmmo)
+		liveWeaponState.AmmoInMagazine += ammoToLoad
+		liveWeaponState.ReserveAmmo -= ammoToLoad
+		liveWeaponState.IsReloading = false
+
+		self:SendWeaponState(player)
+		DebugLog:Log("Weapon", string.format("[WeaponService] %s completed reload for %s", player.Name, liveWeaponState.WeaponId))
+	end)
+end
+
+function WeaponService:SendWeaponState(player)
+	local weaponState = self.PlayerWeapons[player]
+	if not weaponState then
+		return
+	end
+
+	self.WeaponStateChangedRemote:FireClient(player, {
+		WeaponId = weaponState.WeaponId,
+		AmmoInMagazine = weaponState.AmmoInMagazine,
+		ReserveAmmo = weaponState.ReserveAmmo,
+		IsReloading = weaponState.IsReloading,
+	})
+end
+
+return WeaponService
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="SoundService" referent="52">
+    <Properties>
+      <string name="Name">SoundService</string>
+      <bool name="RespectFilteringEnabled">true</bool>
+    </Properties>
+  </Item>
+  <Item class="StarterPlayer" referent="53">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="54">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="Folder" referent="55">
+        <Properties>
+          <string name="Name">Client</string>
+        </Properties>
+        <Item class="LocalScript" referent="56">
+          <Properties>
+            <string name="Name">Boot</string>
+            <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerScripts = player:WaitForChild("PlayerScripts")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local ClientFolder = playerScripts:WaitForChild("Client")
+local ControllersFolder = ClientFolder:WaitForChild("Controllers")
+local UIFolder = ClientFolder:WaitForChild("UI")
+
+local bootOrder = {
+	require(ControllersFolder.InputController),
+	require(ControllersFolder.WeaponLabController),
+	require(ControllersFolder.WeaponController),
+	require(ControllersFolder.InteractionController),
+	require(ControllersFolder.RoundController),
+	require(UIFolder.UIController),
+}
+
+local Controllers = {}
+
+for _, controller in ipairs(bootOrder) do
+	Controllers[controller.Name] = controller
+end
+
+for _, controller in ipairs(bootOrder) do
+	if controller.Init then
+		controller:Init(Controllers)
+	end
+end
+
+for _, controller in ipairs(bootOrder) do
+	if controller.Start then
+		controller:Start()
+	end
+end
+
+DebugLog:Log("Boot", "[Boot] Client boot complete.")
+]]></string>
+          </Properties>
+        </Item>
+        <Item class="Folder" referent="57">
+          <Properties>
+            <string name="Name">Controllers</string>
+          </Properties>
+          <Item class="ModuleScript" referent="58">
+            <Properties>
+              <string name="Name">InputController</string>
+              <string name="Source"><![CDATA[local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local InputController = {}
+InputController.Name = "InputController"
+
+function InputController:Init(controllers)
+	self.Controllers = controllers
+	self.Shared = ReplicatedStorage:WaitForChild("Shared")
+	self.RemotesFolder = self.Shared:WaitForChild("Remotes")
+	self.RequestInteractRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestInteract)
+end
+
+function InputController:Start()
+	self.IsHoldingInteract = false
+	
+	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+		if gameProcessedEvent then
+			return
+		end
+
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
+			return
+		end
+		
+		if input.KeyCode == Enum.KeyCode.Space then
+			self.IsHoldingInteract = true
+			DebugLog:Log("ClientInteraction", "[InputController] Interact key pressed")
+			self:RequestInteractStart()
+		end
+	end)
+	
+	UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
+			return
+		end
+
+		if input.KeyCode == Enum.KeyCode.Space then
+			self.IsHoldingInteract = false
+			DebugLog:Log("ClientInteraction", "[InputController] Interact key released")
+			self:RequestInteractStop()
+		end
+	end)
+	
+	DebugLog:Log("ClientInteraction", "[InputController] Started")
+end
+
+function InputController:RequestInteractStart()
+	DebugLog:Log("ClientInteraction", "[InputController] Sending interact start")
+	self.RequestInteractRemote:FireServer(true)
+end
+
+function InputController:RequestInteractStop()
+	DebugLog:Log("ClientInteraction", "[InputController] Sending interact stop")
+	self.RequestInteractRemote:FireServer(false)
+end
+
+return InputController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="59">
+            <Properties>
+              <string name="Name">InteractionController</string>
+              <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local InteractionController = {}
+InteractionController.Name = "InteractionController"
+
+local function ensureInteractionUI(playerGui)
+	local screenGui = playerGui:FindFirstChild("InteractionUI")
+	if not screenGui then
+		screenGui = Instance.new("ScreenGui")
+		screenGui.Name = "InteractionUI"
+		screenGui.ResetOnSpawn = false
+		screenGui.Parent = playerGui
+	end
+
+	local container = screenGui:FindFirstChild("Container")
+	if not container then
+		container = Instance.new("Frame")
+		container.Name = "Container"
+		container.AnchorPoint = Vector2.new(0.5, 1)
+		container.Position = UDim2.new(0.5, 0, 1, -70)
+		container.Size = UDim2.new(0, 340, 0, 66)
+		container.BackgroundColor3 = Color3.fromRGB(18, 23, 31)
+		container.BackgroundTransparency = 0.15
+		container.Parent = screenGui
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 12)
+		corner.Parent = container
+	end
+
+	local label = container:FindFirstChild("Label")
+	if not label then
+		label = Instance.new("TextLabel")
+		label.Name = "Label"
+		label.BackgroundTransparency = 1
+		label.Position = UDim2.new(0, 16, 0, 10)
+		label.Size = UDim2.new(1, -32, 0, 18)
+		label.Font = Enum.Font.GothamMedium
+		label.Text = "Interacting..."
+		label.TextColor3 = Color3.fromRGB(238, 243, 247)
+		label.TextSize = 16
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		label.Parent = container
+	end
+
+	local barBackground = container:FindFirstChild("BarBackground")
+	if not barBackground then
+		barBackground = Instance.new("Frame")
+		barBackground.Name = "BarBackground"
+		barBackground.Position = UDim2.new(0, 16, 0, 38)
+		barBackground.Size = UDim2.new(1, -32, 0, 14)
+		barBackground.BackgroundColor3 = Color3.fromRGB(41, 51, 66)
+		barBackground.Parent = container
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = barBackground
+	end
+
+	local barFill = barBackground:FindFirstChild("BarFill")
+	if not barFill then
+		barFill = Instance.new("Frame")
+		barFill.Name = "BarFill"
+		barFill.Size = UDim2.new(0, 0, 1, 0)
+		barFill.BackgroundColor3 = Color3.fromRGB(87, 197, 182)
+		barFill.Parent = barBackground
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = barFill
+	end
+
+	return screenGui, container, barFill, label
+end
+
+function InteractionController:Init()
+	self.Shared = ReplicatedStorage:WaitForChild("Shared")
+	self.Player = Players.LocalPlayer
+	self.PlayerGui = self.Player:WaitForChild("PlayerGui")
+	
+	local screenGui, container, barFill, label = ensureInteractionUI(self.PlayerGui)
+	
+	self.UI = {
+		Root = screenGui,
+		Container = container,
+		Bar = barFill,
+		Label = label,
+	}
+	
+	self.Remote = self.Shared.Remotes:WaitForChild(RemoteNames.InteractionStateChanged)
+end
+
+function InteractionController:Start()
+	self.UI.Root.Enabled = false
+	
+	self.Remote.OnClientEvent:Connect(function(data)
+		self:HandleInteractionUpdate(data)
+	end)
+	
+	DebugLog:Log("ClientInteraction", "[InteractionController] Started")
+end
+
+function InteractionController:HandleInteractionUpdate(data)
+	DebugLog:Log("ClientInteraction", "[InteractionController] Received interaction state:", data.State)
+
+	if data.State == "Start" then
+		self.UI.Root.Enabled = true
+		self.UI.Label.Text = data.Target or "Interacting..."
+		self.UI.Bar.Size = UDim2.new(0, 0, 1, 0)
+		
+	elseif data.State == "Update" then
+		local maxValue = data.Max or 1
+		local progressValue = data.Progress or 0
+		local percent = math.clamp(progressValue / maxValue, 0, 1)
+		self.UI.Bar.Size = UDim2.new(percent, 0, 1, 0)
+	
+	elseif data.State == "Stop" then
+		self.UI.Root.Enabled = false
+		
+	elseif data.State == "Complete" then
+		self.UI.Bar.Size = UDim2.new(1, 0, 1, 0)
+		task.delay(0.3, function()
+			self.UI.Root.Enabled = false
+		end)
+	end
+end
+
+return InteractionController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="60">
+            <Properties>
+              <string name="Name">RoundController</string>
+              <string name="Source"><![CDATA[local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local RoundController = {}
+RoundController.Name = "RoundController"
+
+function RoundController:Init()
+	self.CurrentState = {
+		Phase = "Unknown",
+		TimeLeft = 0,
+		Outcome = "None",
+	}
+end
+
+function RoundController:Start()
+	local remotesFolder = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
+	local roundStateChanged = remotesFolder:WaitForChild(RemoteNames.RoundStateChanged)
+	local roundTimerUpdated = remotesFolder:WaitForChild(RemoteNames.RoundTimerUpdated)
+
+	roundStateChanged.OnClientEvent:Connect(function(state)
+		self.CurrentState = {
+			Phase = state.Phase or "Unknown",
+			TimeLeft = state.TimeLeft or 0,
+			Outcome = state.Outcome or "None",
+		}
+		
+		DebugLog:Log("ClientRound", "[RoundController] Received state:", state.Phase, state.TimeLeft)
+	end)
+	
+	roundTimerUpdated.OnClientEvent:Connect(function(state)
+		self.CurrentState = {
+			Phase = state.Phase or self.CurrentState.Phase,
+			TimeLeft = state.TimeLeft or 0,
+			Outcome = state.Outcome or self.CurrentState.Outcome,
+		}
+	end)
+
+	DebugLog:Log("ClientRound", "[RoundController] Started")
+end
+
+function RoundController:GetState()
+	return self.CurrentState
+end
+
+return RoundController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="61">
+            <Properties>
+              <string name="Name">WeaponController</string>
+              <string name="Source"><![CDATA[local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local WeaponAction = require(ReplicatedStorage.Shared.Enums.WeaponAction)
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+
+local WeaponController = {}
+WeaponController.Name = "WeaponController"
+
+function WeaponController:Init(controllers)
+	self.Controllers = controllers
+	self.Shared = ReplicatedStorage:WaitForChild("Shared")
+	self.RemotesFolder = self.Shared:WaitForChild("Remotes")
+	self.RequestWeaponActionRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestWeaponAction)
+	self.WeaponStateChangedRemote = self.RemotesFolder:WaitForChild(RemoteNames.WeaponStateChanged)
+	self.WeaponState = nil
+end
+
+function WeaponController:Start()
+	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+		if gameProcessedEvent then
+			return
+		end
+
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
+			return
+		end
+
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			self:RequestWeaponAction(WeaponAction.Fire)
+			return
+		end
+
+		if input.KeyCode == Enum.KeyCode.R then
+			self:RequestWeaponAction(WeaponAction.Reload)
+		end
+	end)
+
+	self.WeaponStateChangedRemote.OnClientEvent:Connect(function(weaponState)
+		self:HandleWeaponStateChanged(weaponState)
+	end)
+
+	DebugLog:Log("ClientWeapon", "[WeaponController] Started")
+end
+
+function WeaponController:RequestWeaponAction(actionName)
+	DebugLog:Log("ClientWeapon", string.format("[WeaponController] Requesting weapon action %s", actionName))
+	self.RequestWeaponActionRemote:FireServer(actionName)
+end
+
+function WeaponController:HandleWeaponStateChanged(weaponState)
+	self.WeaponState = weaponState
+
+	DebugLog:Log(
+		"ClientWeapon",
+		string.format(
+			"[WeaponController] Weapon state updated: %s ammo=%d reserve=%d reloading=%s",
+			tostring(weaponState.WeaponId),
+			weaponState.AmmoInMagazine or 0,
+			weaponState.ReserveAmmo or 0,
+			tostring(weaponState.IsReloading)
+		)
+	)
+end
+
+return WeaponController
+]]></string>
+            </Properties>
+          </Item>
+          <Item class="ModuleScript" referent="62">
+            <Properties>
+              <string name="Name">WeaponLabController</string>
+              <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+local TransformUtils = require(ReplicatedStorage.Shared.Utility.TransformUtils)
+local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
+
+local WeaponLabController = {}
+WeaponLabController.Name = "WeaponLabController"
+
+WeaponLabController.TransformOrder = {
+	"WeaponOffset",
+	"AimOffset",
+	"RightHandGrip",
+	"LeftHandGrip",
+	"RightShoulder",
+	"LeftShoulder",
+}
+
+WeaponLabController.AxisOrder = {
+	{ Group = "Position", Axis = "X" },
+	{ Group = "Position", Axis = "Y" },
+	{ Group = "Position", Axis = "Z" },
+	{ Group = "Rotation", Axis = "X" },
+	{ Group = "Rotation", Axis = "Y" },
+	{ Group = "Rotation", Axis = "Z" },
+}
+
+local PANEL_BACKGROUND = Color3.fromRGB(17, 22, 31)
+local PANEL_SURFACE = Color3.fromRGB(27, 35, 48)
+local PANEL_ELEVATED = Color3.fromRGB(38, 48, 64)
+local PANEL_MUTED = Color3.fromRGB(87, 102, 126)
+local PANEL_TEXT = Color3.fromRGB(238, 243, 247)
+local PANEL_SUBTEXT = Color3.fromRGB(160, 176, 194)
+local PANEL_ACCENT = Color3.fromRGB(87, 197, 182)
+local PANEL_WARNING = Color3.fromRGB(255, 202, 87)
+
+local function createCorner(parent, radius)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, radius)
+	corner.Parent = parent
+
+	return corner
+end
+
+local function createStroke(parent, color, thickness, transparency)
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = color
+	stroke.Thickness = thickness or 1
+	stroke.Transparency = transparency or 0
+	stroke.Parent = parent
+
+	return stroke
+end
+
+local function createPadding(parent, left, right, top, bottom)
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, left or 0)
+	padding.PaddingRight = UDim.new(0, right or 0)
+	padding.PaddingTop = UDim.new(0, top or 0)
+	padding.PaddingBottom = UDim.new(0, bottom or 0)
+	padding.Parent = parent
+
+	return padding
+end
+
+local function createLabel(name, text, size, parent)
+	local label = Instance.new("TextLabel")
+	label.Name = name
+	label.BackgroundTransparency = 1
+	label.Size = size
+	label.Font = Enum.Font.GothamMedium
+	label.Text = text
+	label.TextColor3 = PANEL_TEXT
+	label.TextSize = 16
+	label.TextWrapped = true
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.TextYAlignment = Enum.TextYAlignment.Center
+	label.Parent = parent
+
+	return label
+end
+
+local function createButton(name, text, size, parent)
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.Size = size
+	button.AutoButtonColor = false
+	button.BackgroundColor3 = PANEL_ELEVATED
+	button.Font = Enum.Font.GothamSemibold
+	button.Text = text
+	button.TextColor3 = PANEL_TEXT
+	button.TextSize = 14
+	button.Parent = parent
+
+	createCorner(button, 10)
+	createStroke(button, Color3.fromRGB(74, 92, 118), 1, 0.15)
+
+	return button
+end
+
+local function createInput(name, size, parent)
+	local input = Instance.new("TextBox")
+	input.Name = name
+	input.Size = size
+	input.BackgroundColor3 = Color3.fromRGB(12, 16, 24)
+	input.ClearTextOnFocus = false
+	input.Font = Enum.Font.Code
+	input.PlaceholderColor3 = PANEL_MUTED
+	input.TextColor3 = PANEL_TEXT
+	input.PlaceholderText = "0"
+	input.TextSize = 14
+	input.TextXAlignment = Enum.TextXAlignment.Left
+	input.Parent = parent
+
+	createCorner(input, 8)
+	createStroke(input, Color3.fromRGB(73, 86, 112), 1, 0.2)
+	createPadding(input, 10, 10, 0, 0)
+
+	return input
+end
+
+local function setButtonSelected(button, isSelected)
+	button.BackgroundColor3 = if isSelected then PANEL_ACCENT else PANEL_ELEVATED
+	button.TextColor3 = if isSelected then Color3.fromRGB(7, 19, 20) else PANEL_TEXT
+end
+
+local function setLinkPart(part, startPosition, endPosition, thickness)
+	local delta = endPosition - startPosition
+	local length = math.max(delta.Magnitude, 0.001)
+
+	part.Size = Vector3.new(thickness, thickness, length)
+	part.CFrame = CFrame.lookAt(startPosition, endPosition) * CFrame.new(0, 0, -length / 2)
+end
+
+local function getFirstWeaponId()
+	local weaponIds = {}
+
+	for weaponId, definition in pairs(WeaponDefinitions) do
+		if definition.ViewModelLab then
+			table.insert(weaponIds, weaponId)
+		end
+	end
+
+	table.sort(weaponIds)
+
+	return weaponIds
+end
+
+function WeaponLabController:Init(controllers)
+	self.Controllers = controllers
+	self.Player = Players.LocalPlayer
+	self.PlayerGui = self.Player:WaitForChild("PlayerGui")
+
+	self.WeaponIds = getFirstWeaponId()
+	self.SelectedWeaponIndex = 1
+	self.SelectedTransformName = self.TransformOrder[1]
+	self.PositionStep = 0.05
+	self.RotationStep = 2.5
+	self.IsVisible = false
+	self.AxisInputs = {}
+	self.TransformButtons = {}
+	self.PreviewConfig = {}
+	self.SourceTransforms = {}
+	self.WorkingTransforms = {}
+
+	if #self.WeaponIds > 0 then
+		self:LoadWeapon(self.WeaponIds[self.SelectedWeaponIndex])
+	end
+
+	self:BuildUI()
+	self:BuildPreview()
+end
+
+function WeaponLabController:Start()
+	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+		self:HandleGlobalInput(input, gameProcessedEvent)
+	end)
+
+	RunService.RenderStepped:Connect(function()
+		if self.IsVisible then
+			self:UpdatePreview(true)
+		end
+	end)
+
+	self:RefreshAll()
+	DebugLog:Log("WeaponLab", "[WeaponLabController] Started")
+end
+
+function WeaponLabController:IsOpen()
+	return self.IsVisible
+end
+
+function WeaponLabController:IsCapturingInput()
+	return self.IsVisible
+end
+
+function WeaponLabController:LoadWeapon(weaponId)
+	local definition = WeaponDefinitions[weaponId]
+	if not definition or not definition.ViewModelLab then
+		return
+	end
+
+	self.SelectedWeaponId = weaponId
+	self.WeaponDefinition = definition
+	self.PreviewConfig = definition.ViewModelLab.Preview or {}
+	self.SourceTransforms = TransformUtils.CloneTransformMap(definition.ViewModelLab.Transforms or {})
+	self.WorkingTransforms = TransformUtils.CloneTransformMap(self.SourceTransforms)
+end
+
+function WeaponLabController:GetSelectedTransform()
+	if not self.WorkingTransforms then
+		return nil
+	end
+
+	if not self.WorkingTransforms[self.SelectedTransformName] then
+		self.WorkingTransforms[self.SelectedTransformName] = {
+			Position = { X = 0, Y = 0, Z = 0 },
+			Rotation = { X = 0, Y = 0, Z = 0 },
+		}
+	end
+
+	return self.WorkingTransforms[self.SelectedTransformName]
+end
+
+function WeaponLabController:BuildUI()
+	local root = Instance.new("ScreenGui")
+	root.Name = "WeaponLabUI"
+	root.ResetOnSpawn = false
+	root.IgnoreGuiInset = true
+	root.Enabled = false
+	root.DisplayOrder = 25
+	root.Parent = self.PlayerGui
+
+	local panel = Instance.new("Frame")
+	panel.Name = "Panel"
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
+	panel.Position = UDim2.fromScale(0.5, 0.5)
+	panel.Size = UDim2.new(0, 1220, 0, 730)
+	panel.BackgroundColor3 = PANEL_BACKGROUND
+	panel.Parent = root
+
+	createCorner(panel, 18)
+	createStroke(panel, Color3.fromRGB(78, 97, 124), 1, 0.1)
+
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.BackgroundTransparency = 1
+	header.Size = UDim2.new(1, 0, 0, 82)
+	header.Parent = panel
+
+	local title = createLabel("Title", "Weapon Lab", UDim2.new(0, 500, 0, 34), header)
+	title.Position = UDim2.new(0, 24, 0, 14)
+	title.Font = Enum.Font.GothamBold
+	title.TextSize = 26
+
+	local subtitle = createLabel(
+		"Subtitle",
+		"Live offset + grip tuning for viewmodels, tools, and animation anchors. Toggle with F6.",
+		UDim2.new(1, -48, 0, 24),
+		header
+	)
+	subtitle.Position = UDim2.new(0, 24, 0, 46)
+	subtitle.TextColor3 = PANEL_SUBTEXT
+	subtitle.TextSize = 14
+
+	local body = Instance.new("Frame")
+	body.Name = "Body"
+	body.BackgroundTransparency = 1
+	body.Position = UDim2.new(0, 0, 0, 82)
+	body.Size = UDim2.new(1, 0, 1, -82)
+	body.Parent = panel
+
+	local sidebar = Instance.new("Frame")
+	sidebar.Name = "Sidebar"
+	sidebar.BackgroundTransparency = 1
+	sidebar.Position = UDim2.new(0, 20, 0, 0)
+	sidebar.Size = UDim2.new(0, 420, 1, -20)
+	sidebar.Parent = body
+
+	local viewportCard = Instance.new("Frame")
+	viewportCard.Name = "ViewportCard"
+	viewportCard.BackgroundColor3 = PANEL_SURFACE
+	viewportCard.Position = UDim2.new(0, 460, 0, 0)
+	viewportCard.Size = UDim2.new(1, -480, 1, -20)
+	viewportCard.Parent = body
+
+	createCorner(viewportCard, 16)
+	createStroke(viewportCard, Color3.fromRGB(74, 92, 118), 1, 0.15)
+
+	local viewportLabel = createLabel("ViewportLabel", "Live Preview", UDim2.new(1, -32, 0, 24), viewportCard)
+	viewportLabel.Position = UDim2.new(0, 16, 0, 14)
+	viewportLabel.Font = Enum.Font.GothamSemibold
+	viewportLabel.TextSize = 18
+
+	local viewportHint = createLabel(
+		"ViewportHint",
+		"Selected controls update the proxy rig in real time. Use this to tune shoulders, grips, offsets, and sight alignment before moving to your real asset.",
+		UDim2.new(1, -32, 0, 36),
+		viewportCard
+	)
+	viewportHint.Position = UDim2.new(0, 16, 0, 40)
+	viewportHint.TextColor3 = PANEL_SUBTEXT
+	viewportHint.TextSize = 13
+
+	local viewport = Instance.new("ViewportFrame")
+	viewport.Name = "Viewport"
+	viewport.BackgroundColor3 = Color3.fromRGB(10, 14, 21)
+	viewport.Position = UDim2.new(0, 16, 0, 92)
+	viewport.Size = UDim2.new(1, -32, 1, -156)
+	viewport.Parent = viewportCard
+
+	createCorner(viewport, 16)
+	createStroke(viewport, Color3.fromRGB(64, 80, 102), 1, 0.15)
+
+	local statusLabel = createLabel("Status", "", UDim2.new(1, -32, 0, 30), viewportCard)
+	statusLabel.Position = UDim2.new(0, 16, 1, -54)
+	statusLabel.TextColor3 = PANEL_WARNING
+	statusLabel.TextSize = 13
+
+	local sectionsLayout = Instance.new("UIListLayout")
+	sectionsLayout.Padding = UDim.new(0, 12)
+	sectionsLayout.FillDirection = Enum.FillDirection.Vertical
+	sectionsLayout.Parent = sidebar
+
+	local weaponCard = self:CreateCard(sidebar, 126)
+	local weaponTitle = createLabel("WeaponTitle", "Weapon", UDim2.new(1, -24, 0, 22), weaponCard)
+	weaponTitle.Position = UDim2.new(0, 12, 0, 10)
+	weaponTitle.Font = Enum.Font.GothamSemibold
+	weaponTitle.TextSize = 18
+
+	local weaponName = createLabel("WeaponName", "", UDim2.new(1, -24, 0, 24), weaponCard)
+	weaponName.Position = UDim2.new(0, 12, 0, 38)
+	weaponName.TextSize = 17
+
+	local weaponHint = createLabel(
+		"WeaponHint",
+		"Cycle definitions here. Every transform below edits a local working copy and the export updates instantly.",
+		UDim2.new(1, -24, 0, 36),
+		weaponCard
+	)
+	weaponHint.Position = UDim2.new(0, 12, 0, 64)
+	weaponHint.TextColor3 = PANEL_SUBTEXT
+	weaponHint.TextSize = 13
+
+	local previousButton = createButton("PreviousWeapon", "<", UDim2.new(0, 44, 0, 36), weaponCard)
+	previousButton.Position = UDim2.new(1, -104, 0, 16)
+
+	local nextButton = createButton("NextWeapon", ">", UDim2.new(0, 44, 0, 36), weaponCard)
+	nextButton.Position = UDim2.new(1, -56, 0, 16)
+
+	local transformCard = self:CreateCard(sidebar, 162)
+	local transformTitle = createLabel("TransformTitle", "Transform Set", UDim2.new(1, -24, 0, 22), transformCard)
+	transformTitle.Position = UDim2.new(0, 12, 0, 10)
+	transformTitle.Font = Enum.Font.GothamSemibold
+	transformTitle.TextSize = 18
+
+	local transformContainer = Instance.new("Frame")
+	transformContainer.Name = "TransformContainer"
+	transformContainer.BackgroundTransparency = 1
+	transformContainer.Position = UDim2.new(0, 12, 0, 42)
+	transformContainer.Size = UDim2.new(1, -24, 1, -54)
+	transformContainer.Parent = transformCard
+
+	local transformLayout = Instance.new("UIGridLayout")
+	transformLayout.CellPadding = UDim2.new(0, 10, 0, 10)
+	transformLayout.CellSize = UDim2.new(0.5, -5, 0, 42)
+	transformLayout.Parent = transformContainer
+
+	for _, transformName in ipairs(self.TransformOrder) do
+		local transformButton = createButton(transformName, self:FormatTransformLabel(transformName), UDim2.new(0, 0, 0, 42), transformContainer)
+		transformButton.MouseButton1Click:Connect(function()
+			self.SelectedTransformName = transformName
+			self:RefreshAll()
+		end)
+
+		self.TransformButtons[transformName] = transformButton
+	end
+
+	local editorCard = self:CreateCard(sidebar, 286)
+	local editorTitle = createLabel("EditorTitle", "Numeric Tweaks", UDim2.new(1, -24, 0, 22), editorCard)
+	editorTitle.Position = UDim2.new(0, 12, 0, 10)
+	editorTitle.Font = Enum.Font.GothamSemibold
+	editorTitle.TextSize = 18
+
+	local editorHint = createLabel(
+		"EditorHint",
+		"Use the plus/minus nudges or type exact values. Position is in studs. Rotation is in degrees.",
+		UDim2.new(1, -24, 0, 34),
+		editorCard
+	)
+	editorHint.Position = UDim2.new(0, 12, 0, 34)
+	editorHint.TextColor3 = PANEL_SUBTEXT
+	editorHint.TextSize = 13
+
+	local editorRows = Instance.new("Frame")
+	editorRows.Name = "EditorRows"
+	editorRows.BackgroundTransparency = 1
+	editorRows.Position = UDim2.new(0, 12, 0, 74)
+	editorRows.Size = UDim2.new(1, -24, 0, 146)
+	editorRows.Parent = editorCard
+
+	local rowsLayout = Instance.new("UIListLayout")
+	rowsLayout.Padding = UDim.new(0, 6)
+	rowsLayout.FillDirection = Enum.FillDirection.Vertical
+	rowsLayout.Parent = editorRows
+
+	for _, axisInfo in ipairs(self.AxisOrder) do
+		local axisKey = axisInfo.Group .. axisInfo.Axis
+		local row = Instance.new("Frame")
+		row.Name = axisKey
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.new(1, 0, 0, 24)
+		row.Parent = editorRows
+
+		local rowLabel = createLabel("Label", axisInfo.Group .. " " .. axisInfo.Axis, UDim2.new(0, 120, 1, 0), row)
+		rowLabel.TextSize = 14
+
+		local minusButton = createButton("Minus", "-", UDim2.new(0, 34, 1, 0), row)
+		minusButton.Position = UDim2.new(0, 128, 0, 0)
+
+		local valueBox = createInput("Value", UDim2.new(1, -214, 1, 0), row)
+		valueBox.Position = UDim2.new(0, 170, 0, 0)
+
+		local plusButton = createButton("Plus", "+", UDim2.new(0, 34, 1, 0), row)
+		plusButton.Position = UDim2.new(1, -34, 0, 0)
+
+		minusButton.MouseButton1Click:Connect(function()
+			self:NudgeAxis(axisInfo.Group, axisInfo.Axis, -self:GetStep(axisInfo.Group))
+		end)
+
+		plusButton.MouseButton1Click:Connect(function()
+			self:NudgeAxis(axisInfo.Group, axisInfo.Axis, self:GetStep(axisInfo.Group))
+		end)
+
+		valueBox.FocusLost:Connect(function(enterPressed)
+			if not enterPressed then
+				self:RefreshAxisFields()
+				return
+			end
+
+			local value = tonumber(valueBox.Text)
+			if value then
+				self:SetAxisValue(axisInfo.Group, axisInfo.Axis, value)
+			else
+				self:SetStatus(string.format("Could not parse %s %s as a number.", axisInfo.Group, axisInfo.Axis))
+			end
+
+			self:RefreshAll()
+		end)
+
+		self.AxisInputs[axisKey] = valueBox
+	end
+
+	local stepsRow = Instance.new("Frame")
+	stepsRow.Name = "StepsRow"
+	stepsRow.BackgroundTransparency = 1
+	stepsRow.Position = UDim2.new(0, 12, 0, 228)
+	stepsRow.Size = UDim2.new(1, -24, 0, 26)
+	stepsRow.Parent = editorCard
+
+	local positionStepLabel = createLabel("PositionStepLabel", "Position Step", UDim2.new(0, 110, 1, 0), stepsRow)
+	positionStepLabel.TextSize = 14
+
+	local positionStepBox = createInput("PositionStep", UDim2.new(0, 70, 1, 0), stepsRow)
+	positionStepBox.Position = UDim2.new(0, 112, 0, 0)
+
+	local rotationStepLabel = createLabel("RotationStepLabel", "Rotation Step", UDim2.new(0, 110, 1, 0), stepsRow)
+	rotationStepLabel.Position = UDim2.new(0, 196, 0, 0)
+	rotationStepLabel.TextSize = 14
+
+	local rotationStepBox = createInput("RotationStep", UDim2.new(0, 70, 1, 0), stepsRow)
+	rotationStepBox.Position = UDim2.new(0, 308, 0, 0)
+
+	positionStepBox.FocusLost:Connect(function(enterPressed)
+		self:HandleStepFocusLost(positionStepBox, "Position", enterPressed)
+	end)
+
+	rotationStepBox.FocusLost:Connect(function(enterPressed)
+		self:HandleStepFocusLost(rotationStepBox, "Rotation", enterPressed)
+	end)
+
+	local actionsRow = Instance.new("Frame")
+	actionsRow.Name = "ActionsRow"
+	actionsRow.BackgroundTransparency = 1
+	actionsRow.Position = UDim2.new(0, 12, 0, 258)
+	actionsRow.Size = UDim2.new(1, -24, 0, 36)
+	actionsRow.Parent = editorCard
+
+	local resetTransformButton = createButton("ResetTransform", "Reset Transform", UDim2.new(0.5, -6, 1, 0), actionsRow)
+	resetTransformButton.Position = UDim2.new(0, 0, 0, 0)
+	resetTransformButton.MouseButton1Click:Connect(function()
+		self:ResetSelectedTransform()
+	end)
+
+	local resetWeaponButton = createButton("ResetWeapon", "Reset Weapon", UDim2.new(0.5, -6, 1, 0), actionsRow)
+	resetWeaponButton.Position = UDim2.new(0.5, 6, 0, 0)
+	resetWeaponButton.MouseButton1Click:Connect(function()
+		self:ResetWeaponTransforms()
+	end)
+
+	local exportCard = self:CreateCard(sidebar, 198)
+	local exportTitle = createLabel("ExportTitle", "Export", UDim2.new(1, -24, 0, 22), exportCard)
+	exportTitle.Position = UDim2.new(0, 12, 0, 10)
+	exportTitle.Font = Enum.Font.GothamSemibold
+	exportTitle.TextSize = 18
+
+	local exportHint = createLabel(
+		"ExportHint",
+		"Copy this table back into the weapon definition once the pose feels right.",
+		UDim2.new(1, -24, 0, 32),
+		exportCard
+	)
+	exportHint.Position = UDim2.new(0, 12, 0, 34)
+	exportHint.TextColor3 = PANEL_SUBTEXT
+	exportHint.TextSize = 13
+
+	local exportBox = Instance.new("TextBox")
+	exportBox.Name = "ExportBox"
+	exportBox.ClearTextOnFocus = false
+	exportBox.MultiLine = true
+	exportBox.TextEditable = true
+	exportBox.TextWrapped = false
+	exportBox.Font = Enum.Font.Code
+	exportBox.TextSize = 14
+	exportBox.TextXAlignment = Enum.TextXAlignment.Left
+	exportBox.TextYAlignment = Enum.TextYAlignment.Top
+	exportBox.BackgroundColor3 = Color3.fromRGB(12, 16, 24)
+	exportBox.TextColor3 = PANEL_TEXT
+	exportBox.Position = UDim2.new(0, 12, 0, 70)
+	exportBox.Size = UDim2.new(1, -24, 1, -82)
+	exportBox.Parent = exportCard
+
+	createCorner(exportBox, 10)
+	createStroke(exportBox, Color3.fromRGB(73, 86, 112), 1, 0.2)
+	createPadding(exportBox, 10, 10, 10, 10)
+
+	self.UI = {
+		Root = root,
+		WeaponName = weaponName,
+		PreviousWeapon = previousButton,
+		NextWeapon = nextButton,
+		PositionStep = positionStepBox,
+		RotationStep = rotationStepBox,
+		ExportBox = exportBox,
+		Viewport = viewport,
+		StatusLabel = statusLabel,
+	}
+
+	previousButton.MouseButton1Click:Connect(function()
+		self:SelectWeaponByDelta(-1)
+	end)
+
+	nextButton.MouseButton1Click:Connect(function()
+		self:SelectWeaponByDelta(1)
+	end)
+end
+
+function WeaponLabController:CreateCard(parent, height)
+	local card = Instance.new("Frame")
+	card.BackgroundColor3 = PANEL_SURFACE
+	card.Size = UDim2.new(1, 0, 0, height)
+	card.Parent = parent
+
+	createCorner(card, 16)
+	createStroke(card, Color3.fromRGB(74, 92, 118), 1, 0.15)
+
+	return card
+end
+
+function WeaponLabController:BuildPreview()
+	local viewport = self.UI.Viewport
+
+	local camera = Instance.new("Camera")
+	camera.FieldOfView = 35
+	camera.Parent = viewport
+	viewport.CurrentCamera = camera
+
+	local worldModel = Instance.new("WorldModel")
+	worldModel.Parent = viewport
+
+	self.Preview = {
+		Camera = camera,
+		WorldModel = worldModel,
+		Parts = {},
+	}
+
+	self.Preview.Parts.Torso = self:CreatePreviewPart("Torso", Vector3.new(1.75, 1.9, 0.8), self.PreviewConfig.TorsoColor)
+	self.Preview.Parts.RightShoulder = self:CreatePreviewPart("RightShoulder", Vector3.new(0.2, 0.2, 0.2), PANEL_WARNING, Enum.PartType.Ball)
+	self.Preview.Parts.LeftShoulder = self:CreatePreviewPart("LeftShoulder", Vector3.new(0.2, 0.2, 0.2), PANEL_WARNING, Enum.PartType.Ball)
+	self.Preview.Parts.RightHand = self:CreatePreviewPart("RightHand", Vector3.new(0.24, 0.24, 0.24), PANEL_ACCENT, Enum.PartType.Ball)
+	self.Preview.Parts.LeftHand = self:CreatePreviewPart("LeftHand", Vector3.new(0.24, 0.24, 0.24), PANEL_ACCENT, Enum.PartType.Ball)
+	self.Preview.Parts.RightArm = self:CreatePreviewPart("RightArm", Vector3.new(0.16, 0.16, 1), self.PreviewConfig.RightArmColor)
+	self.Preview.Parts.LeftArm = self:CreatePreviewPart("LeftArm", Vector3.new(0.16, 0.16, 1), self.PreviewConfig.LeftArmColor)
+	self.Preview.Parts.WeaponBody = self:CreatePreviewPart("WeaponBody", self.PreviewConfig.WeaponSize, self.PreviewConfig.WeaponColor)
+	self.Preview.Parts.WeaponAccent = self:CreatePreviewPart("WeaponAccent", self.PreviewConfig.AccentSize, self.PreviewConfig.AccentColor)
+	self.Preview.Parts.AimMarker = self:CreatePreviewPart("AimMarker", Vector3.new(0.16, 0.16, 0.16), PANEL_WARNING, Enum.PartType.Ball)
+	self.Preview.Parts.Stage = self:CreatePreviewPart("Stage", Vector3.new(7.5, 0.15, 7.5), Color3.fromRGB(23, 31, 43))
+	self.Preview.Parts.Backdrop = self:CreatePreviewPart("Backdrop", Vector3.new(8, 5.5, 0.15), Color3.fromRGB(14, 18, 24))
+
+	self.Preview.Parts.Stage.CFrame = CFrame.new(0, -1.65, 0)
+	self.Preview.Parts.Backdrop.CFrame = CFrame.new(0, 0.45, -2.5)
+
+	self:UpdatePreview(false)
+end
+
+function WeaponLabController:CreatePreviewPart(name, size, color, shape)
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Anchored = true
+	part.CanCollide = false
+	part.Material = Enum.Material.SmoothPlastic
+	part.Size = size or Vector3.new(1, 1, 1)
+	part.Color = color or Color3.fromRGB(220, 220, 220)
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Shape = shape or Enum.PartType.Block
+	part.Parent = self.Preview.WorldModel
+
+	return part
+end
+
+function WeaponLabController:HandleGlobalInput(input, gameProcessedEvent)
+	if gameProcessedEvent then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.F6 then
+		self:SetVisible(not self.IsVisible)
+		return
+	end
+
+	if not self.IsVisible or UserInputService:GetFocusedTextBox() then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.LeftBracket then
+		self:SelectTransformByDelta(-1)
+	elseif input.KeyCode == Enum.KeyCode.RightBracket then
+		self:SelectTransformByDelta(1)
+	elseif input.KeyCode == Enum.KeyCode.BackSlash then
+		self:ResetSelectedTransform()
+	end
+end
+
+function WeaponLabController:SetVisible(isVisible)
+	self.IsVisible = isVisible
+	self.UI.Root.Enabled = isVisible
+
+	if isVisible then
+		self:SetStatus("Live editor open. [ and ] switch transforms. \\ resets the selected transform.")
+	else
+		self:SetStatus("")
+	end
+
+	self:RefreshAll()
+end
+
+function WeaponLabController:SetStatus(message)
+	self.StatusMessage = message
+	if self.UI and self.UI.StatusLabel then
+		self.UI.StatusLabel.Text = message
+	end
+end
+
+function WeaponLabController:SelectWeaponByDelta(delta)
+	if #self.WeaponIds == 0 then
+		return
+	end
+
+	self.SelectedWeaponIndex += delta
+	if self.SelectedWeaponIndex < 1 then
+		self.SelectedWeaponIndex = #self.WeaponIds
+	elseif self.SelectedWeaponIndex > #self.WeaponIds then
+		self.SelectedWeaponIndex = 1
+	end
+
+	self:LoadWeapon(self.WeaponIds[self.SelectedWeaponIndex])
+	self:SetStatus(string.format("Loaded %s for tuning.", self.SelectedWeaponId))
+	self:RefreshAll()
+end
+
+function WeaponLabController:SelectTransformByDelta(delta)
+	local currentIndex = table.find(self.TransformOrder, self.SelectedTransformName) or 1
+	currentIndex += delta
+
+	if currentIndex < 1 then
+		currentIndex = #self.TransformOrder
+	elseif currentIndex > #self.TransformOrder then
+		currentIndex = 1
+	end
+
+	self.SelectedTransformName = self.TransformOrder[currentIndex]
+	self:SetStatus(string.format("Selected %s.", self:FormatTransformLabel(self.SelectedTransformName)))
+	self:RefreshAll()
+end
+
+function WeaponLabController:GetStep(groupName)
+	if groupName == "Rotation" then
+		return self.RotationStep
+	end
+
+	return self.PositionStep
+end
+
+function WeaponLabController:HandleStepFocusLost(input, groupName, enterPressed)
+	if not enterPressed then
+		self:RefreshStepFields()
+		return
+	end
+
+	local value = tonumber(input.Text)
+	if not value or value <= 0 then
+		self:SetStatus(string.format("%s step must be a positive number.", groupName))
+		self:RefreshStepFields()
+		return
+	end
+
+	if groupName == "Rotation" then
+		self.RotationStep = value
+	else
+		self.PositionStep = value
+	end
+
+	self:SetStatus(string.format("%s step set to %s.", groupName, TransformUtils.FormatNumber(value)))
+	self:RefreshStepFields()
+end
+
+function WeaponLabController:NudgeAxis(groupName, axisName, delta)
+	local transform = self:GetSelectedTransform()
+	if not transform then
+		return
+	end
+
+	TransformUtils.AdjustAxis(transform, groupName, axisName, delta)
+	self:SetStatus(
+		string.format(
+			"%s %s nudged by %s.",
+			groupName,
+			axisName,
+			TransformUtils.FormatNumber(delta)
+		)
+	)
+	self:RefreshAll()
+end
+
+function WeaponLabController:SetAxisValue(groupName, axisName, value)
+	local transform = self:GetSelectedTransform()
+	if not transform then
+		return
+	end
+
+	TransformUtils.SetAxis(transform, groupName, axisName, value)
+	self:SetStatus(
+		string.format(
+			"%s %s set to %s.",
+			groupName,
+			axisName,
+			TransformUtils.FormatNumber(value)
+		)
+	)
+end
+
+function WeaponLabController:ResetSelectedTransform()
+	if not self.SourceTransforms or not self.WorkingTransforms then
+		return
+	end
+
+	self.WorkingTransforms[self.SelectedTransformName] = TransformUtils.CloneTransform(
+		self.SourceTransforms[self.SelectedTransformName]
+	)
+	self:SetStatus(string.format("Reset %s to definition defaults.", self:FormatTransformLabel(self.SelectedTransformName)))
+	self:RefreshAll()
+end
+
+function WeaponLabController:ResetWeaponTransforms()
+	if not self.SourceTransforms then
+		return
+	end
+
+	self.WorkingTransforms = TransformUtils.CloneTransformMap(self.SourceTransforms)
+	self:SetStatus(string.format("Reset all %s transforms.", self.SelectedWeaponId))
+	self:RefreshAll()
+end
+
+function WeaponLabController:RefreshAll()
+	self.UI.Root.Enabled = self.IsVisible
+	self:RefreshWeaponLabel()
+	self:RefreshTransformButtons()
+	self:RefreshAxisFields()
+	self:RefreshStepFields()
+	self:RefreshExportText()
+	self:UpdatePreview(false)
+
+	if self.StatusMessage then
+		self.UI.StatusLabel.Text = self.StatusMessage
+	end
+end
+
+function WeaponLabController:RefreshWeaponLabel()
+	if not self.WeaponDefinition then
+		self.UI.WeaponName.Text = "No weapon definitions expose `ViewModelLab` data yet."
+		return
+	end
+
+	self.UI.WeaponName.Text = string.format(
+		"%s  [%d / %d]",
+		self.WeaponDefinition.DisplayName or self.SelectedWeaponId,
+		self.SelectedWeaponIndex,
+		#self.WeaponIds
+	)
+end
+
+function WeaponLabController:RefreshTransformButtons()
+	for transformName, button in pairs(self.TransformButtons) do
+		setButtonSelected(button, transformName == self.SelectedTransformName)
+	end
+end
+
+function WeaponLabController:RefreshAxisFields()
+	local transform = self:GetSelectedTransform()
+	if not transform then
+		return
+	end
+
+	for _, axisInfo in ipairs(self.AxisOrder) do
+		local axisKey = axisInfo.Group .. axisInfo.Axis
+		local input = self.AxisInputs[axisKey]
+		local value = transform[axisInfo.Group] and transform[axisInfo.Group][axisInfo.Axis] or 0
+		input.Text = TransformUtils.FormatNumber(value)
+	end
+end
+
+function WeaponLabController:RefreshStepFields()
+	self.UI.PositionStep.Text = TransformUtils.FormatNumber(self.PositionStep)
+	self.UI.RotationStep.Text = TransformUtils.FormatNumber(self.RotationStep)
+end
+
+function WeaponLabController:RefreshExportText()
+	if not self.WorkingTransforms then
+		self.UI.ExportBox.Text = "-- No weapon lab transforms available."
+		return
+	end
+
+	self.UI.ExportBox.Text = string.format(
+		"Transforms = %s",
+		TransformUtils.FormatTransformMap(self.WorkingTransforms, "\t")
+	)
+end
+
+function WeaponLabController:UpdatePreview(animateCamera)
+	if not self.Preview or not self.WorkingTransforms then
+		return
+	end
+
+	local previewParts = self.Preview.Parts
+	local transforms = self.WorkingTransforms
+
+	local torsoCF = CFrame.new(0, 0.05, 0)
+	local rightShoulderCF = torsoCF * TransformUtils.ToCFrame(transforms.RightShoulder or {})
+	local leftShoulderCF = torsoCF * TransformUtils.ToCFrame(transforms.LeftShoulder or {})
+	local weaponCF = torsoCF * TransformUtils.ToCFrame(transforms.WeaponOffset or {})
+	local rightHandCF = weaponCF * TransformUtils.ToCFrame(transforms.RightHandGrip or {})
+	local leftHandCF = weaponCF * TransformUtils.ToCFrame(transforms.LeftHandGrip or {})
+	local aimMarkerCF = weaponCF * TransformUtils.ToCFrame(transforms.AimOffset or {})
+
+	local bodySize = self.PreviewConfig.WeaponSize or Vector3.new(0.55, 0.75, 1.7)
+	local accentSize = self.PreviewConfig.AccentSize or Vector3.new(0.22, 0.22, 0.55)
+
+	previewParts.Torso.CFrame = torsoCF
+	previewParts.RightShoulder.CFrame = rightShoulderCF
+	previewParts.LeftShoulder.CFrame = leftShoulderCF
+	previewParts.RightHand.CFrame = rightHandCF
+	previewParts.LeftHand.CFrame = leftHandCF
+	previewParts.WeaponBody.Size = bodySize
+	previewParts.WeaponBody.CFrame = weaponCF
+	previewParts.WeaponAccent.Size = accentSize
+	previewParts.WeaponAccent.CFrame = weaponCF * CFrame.new(0, 0.08, bodySize.Z * 0.3)
+	previewParts.AimMarker.CFrame = aimMarkerCF
+
+	setLinkPart(previewParts.RightArm, rightShoulderCF.Position, rightHandCF.Position, 0.17)
+	setLinkPart(previewParts.LeftArm, leftShoulderCF.Position, leftHandCF.Position, 0.17)
+
+	self:ApplyPreviewColors()
+
+	local orbitAngle = if animateCamera then os.clock() * 0.28 else 0.9
+	local cameraPosition = Vector3.new(math.cos(orbitAngle) * 5.8, 1.6, math.sin(orbitAngle) * 5.8)
+	self.Preview.Camera.CFrame = CFrame.lookAt(cameraPosition, Vector3.new(0, 0.05, 0))
+end
+
+function WeaponLabController:ApplyPreviewColors()
+	local previewParts = self.Preview.Parts
+
+	previewParts.Torso.Color = self.PreviewConfig.TorsoColor or Color3.fromRGB(73, 90, 122)
+	previewParts.RightArm.Color = self.PreviewConfig.RightArmColor or Color3.fromRGB(220, 184, 146)
+	previewParts.LeftArm.Color = self.PreviewConfig.LeftArmColor or Color3.fromRGB(196, 160, 124)
+	previewParts.WeaponBody.Color = self.PreviewConfig.WeaponColor or Color3.fromRGB(44, 44, 52)
+	previewParts.WeaponAccent.Color = self.PreviewConfig.AccentColor or Color3.fromRGB(229, 174, 74)
+
+	local selectedName = self.SelectedTransformName
+
+	previewParts.RightShoulder.Color = if selectedName == "RightShoulder" then PANEL_ACCENT else PANEL_WARNING
+	previewParts.LeftShoulder.Color = if selectedName == "LeftShoulder" then PANEL_ACCENT else PANEL_WARNING
+	previewParts.RightHand.Color = if selectedName == "RightHandGrip" then PANEL_ACCENT else Color3.fromRGB(132, 212, 199)
+	previewParts.LeftHand.Color = if selectedName == "LeftHandGrip" then PANEL_ACCENT else Color3.fromRGB(132, 212, 199)
+	previewParts.AimMarker.Color = if selectedName == "AimOffset" then PANEL_ACCENT else PANEL_WARNING
+
+	if selectedName == "WeaponOffset" then
+		previewParts.WeaponBody.Color = Color3.fromRGB(92, 217, 201)
+		previewParts.WeaponAccent.Color = Color3.fromRGB(255, 225, 122)
+	end
+end
+
+function WeaponLabController:FormatTransformLabel(transformName)
+	return string.gsub(transformName, "(%u)", " %1"):gsub("^ ", "")
+end
+
+return WeaponLabController
+]]></string>
+            </Properties>
+          </Item>
+        </Item>
+        <Item class="Folder" referent="63">
+          <Properties>
+            <string name="Name">UI</string>
+          </Properties>
+          <Item class="ModuleScript" referent="64">
+            <Properties>
+              <string name="Name">UIController</string>
+              <string name="Source"><![CDATA[local Players = game:GetService("Players")
+
+local UIController = {}
+UIController.Name = "UIController"
+
+local function ensureLabel(parent, name, position, text)
+	local label = parent:FindFirstChild(name)
+	if label then
+		return label
+	end
+
+	label = Instance.new("TextLabel")
+	label.Name = name
+	label.BackgroundTransparency = 1
+	label.Position = position
+	label.Size = UDim2.new(1, 0, 0, 24)
+	label.Font = Enum.Font.GothamMedium
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(239, 244, 248)
+	label.TextSize = 18
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = parent
+
+	return label
+end
+
+local function ensureMainHUD(playerGui)
+	local mainHUD = playerGui:FindFirstChild("MainHUD")
+	if not mainHUD then
+		mainHUD = Instance.new("ScreenGui")
+		mainHUD.Name = "MainHUD"
+		mainHUD.ResetOnSpawn = false
+		mainHUD.Parent = playerGui
+	end
+
+	local container = mainHUD:FindFirstChild("Container")
+	if not container then
+		container = Instance.new("Frame")
+		container.Name = "Container"
+		container.AnchorPoint = Vector2.new(0, 0)
+		container.Position = UDim2.new(0, 20, 0, 20)
+		container.Size = UDim2.new(0, 260, 0, 88)
+		container.BackgroundColor3 = Color3.fromRGB(17, 22, 31)
+		container.BackgroundTransparency = 0.2
+		container.Parent = mainHUD
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(0, 12)
+		corner.Parent = container
+	end
+
+	local phaseLabel = ensureLabel(container, "PhaseLabel", UDim2.new(0, 14, 0, 10), "Phase: Unknown")
+	local timerLabel = ensureLabel(container, "TimerLabel", UDim2.new(0, 14, 0, 32), "Time: 0")
+	local outcomeLabel = ensureLabel(container, "OutcomeLabel", UDim2.new(0, 14, 0, 54), "")
+
+	return mainHUD, container, phaseLabel, timerLabel, outcomeLabel
+end
+
+function UIController:Init(controllers)
+	self.Controllers = controllers
+	self.Player = Players.LocalPlayer
+	self.PlayerGui = self.Player:WaitForChild("PlayerGui")
+	
+	self.LastPhase = nil
+	self.LastTimeLeft = nil
+	self.LastOutcome = nil
+end
+
+function UIController:Start()
+	local mainHUD, container, phaseLabel, timerLabel, outcomeLabel = ensureMainHUD(self.PlayerGui)
+	self.Root = mainHUD
+	self.Container = container
+	self.PhaseLabel = phaseLabel
+	self.TimerLabel = timerLabel
+	self.OutcomeLabel = outcomeLabel
+	
+	task.spawn(function()
+		while true do
+			self:UpdateHUD()
+			task.wait(0.1)
+		end
+	end)
+	
+	print("[UIController] Started")
+end
+
+function UIController:UpdateHUD()
+	local roundController = self.Controllers.RoundController
+	local state = roundController and roundController:GetState()
+	
+	if not state then
+		return
+	end
+	
+	local phase = state.Phase or "Unknown"
+	local timeLeft = state.TimeLeft
+	if timeLeft == nil then
+		timeLeft = 0
+	end
+	local outcome = state.Outcome or "None"
+	local phaseChanged = phase ~= self.LastPhase
+	local timeChanged = timeLeft ~= self.LastTimeLeft
+	local outcomeChanged = outcome ~= self.LastOutcome
+	
+	if phaseChanged then
+		self.LastPhase = phase
+		self.PhaseLabel.Text = "Phase: " .. tostring(phase)
+	end
+	
+	if timeChanged then
+		self.LastTimeLeft = timeLeft
+		self.TimerLabel.Text = "Time: " .. tostring(timeLeft) 
+	end
+	
+	if outcomeChanged or phaseChanged then
+		self.LastOutcome = outcome
+		self.OutcomeLabel.Text = self:_formatOutcomeText(phase, outcome)
+		
+		if self.OutcomeLabel.Text == "" then
+			self.OutcomeLabel.Visible = false
+		else
+			self.OutcomeLabel.Visible = true
+		end
+	end
+end
+
+function UIController:_formatOutcomeText(phase, outcome)
+	if phase ~= "Results" then
+		return ""
+	end
+	
+	if outcome == "RemnantsWin" then
+		return "Remnants Win"
+	elseif outcome == "EntitiesWin" then
+		return "Entities Win"
+	elseif outcome == "Draw" then
+		return "Draw"
+	end
+	
+	return ""
+end
+
+return UIController
+]]></string>
+            </Properties>
+          </Item>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="Workspace" referent="65">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="FilteringEnabled">true</bool>
+      <bool name="NeedsPivotMigration">false</bool>
+    </Properties>
+    <Item class="Part" referent="66">
+      <Properties>
+        <string name="Name">Baseplate</string>
+        <bool name="Anchored">true</bool>
+        <Color3uint8 name="Color3uint8">6512483</Color3uint8>
+        <bool name="Locked">true</bool>
+        <Vector3 name="Position">
+          <X>0</X>
+          <Y>-10</Y>
+          <Z>0</Z>
+        </Vector3>
+        <Vector3 name="size">
+          <X>512</X>
+          <Y>20</Y>
+          <Z>512</Z>
+        </Vector3>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>

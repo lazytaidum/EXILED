@@ -1,7 +1,10 @@
 local ActionToken = {
 	PrimaryContextAction = "PrimaryContextAction",
 	SecondaryContextAction = "SecondaryContextAction",
+<<<<<<< HEAD
 	PrimaryFire = "PrimaryFire",
+=======
+>>>>>>> 9defa84 (WHOLE LOTTA SHT)
 
 	Sprint = "Sprint",
 	Crouch = "Crouch",

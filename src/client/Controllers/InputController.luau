@@ -7,7 +7,8 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 local InputController = {}
 InputController.Name = "InputController"
 
-function InputController:Init()
+function InputController:Init(controllers)
+	self.Controllers = controllers
 	self.Shared = ReplicatedStorage:WaitForChild("Shared")
 	self.RemotesFolder = self.Shared:WaitForChild("Remotes")
 	self.RequestInteractRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestInteract)
@@ -20,6 +21,10 @@ function InputController:Start()
 		if gameProcessedEvent then
 			return
 		end
+
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
+			return
+		end
 		
 		if input.KeyCode == Enum.KeyCode.Space then
 			self.IsHoldingInteract = true
@@ -29,6 +34,10 @@ function InputController:Start()
 	end)
 	
 	UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
+			return
+		end
+
 		if input.KeyCode == Enum.KeyCode.Space then
 			self.IsHoldingInteract = false
 			DebugLog:Log("ClientInteraction", "[InputController] Interact key released")

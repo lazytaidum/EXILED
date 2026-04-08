@@ -8,6 +8,8 @@ local RemoteNames = {
 	StatusEffectsChanged = "StatusEffectsChanged",
 	RequestStruggleInput = "RequestStruggleInput",
 	StruggleStateChanged = "StruggleStateChanged",
+	RequestBreathHoldState = "RequestBreathHoldState",
+	BreathHoldStateChanged = "BreathHoldStateChanged",
 }
 
 return RemoteNames

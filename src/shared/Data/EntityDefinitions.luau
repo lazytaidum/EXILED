@@ -55,6 +55,30 @@ local JiangshiDefinition = {
 		},
 
 		Abilities = {
+			BreathlessHunt = {
+				Id = "BreathlessHunt",
+				CastTime = 0,
+				Cooldown = 40,
+				RequireState = {
+					"Patrol",
+					"Scout",
+				},
+				Effects = {
+					{
+						Type = "ApplyStatus",
+						Targets = "Self",
+						StatusId = "Stunned",
+						Duration = 3,
+					},
+					{
+						Type = "StartBreathHoldChallenge",
+						Duration = 3,
+						HastePerFailure = 0.15,
+						HasteDuration = 5,
+					},
+				},
+			},
+
 			BlindHunger = {
 				Id = "BlindHunger",
 				CastTime = 0.35,
@@ -94,6 +118,7 @@ local JiangshiDefinition = {
 		},
 
 		AbilityOrder = {
+			"BreathlessHunt",
 			"BlindHunger",
 			"QiSeal",
 		},

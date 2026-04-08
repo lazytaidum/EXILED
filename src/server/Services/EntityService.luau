@@ -16,6 +16,7 @@ EntityService.Dependencies = {
 	"StatusEffectService",
 	"InteractionService",
 	"StruggleService",
+	"BreathHoldService",
 }
 
 local ENTITY_STATE = {
@@ -633,6 +634,12 @@ function EntityService:_executeEffectStep(entity, step, context)
 		for _, target in ipairs(self:_resolveEffectTargets(entity, step, context)) do
 			self.StruggleService:BeginStruggle(entity, target, step)
 		end
+	elseif stepType == "StartBreathHoldChallenge" then
+		if not self.BreathHoldService then
+			return
+		end
+
+		self.BreathHoldService:BeginChallenge(entity, step)
 	end
 end
 

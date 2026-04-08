@@ -15,6 +15,7 @@ local bootOrder = {
 	require(ControllersFolder.ActionResolver),
 	require(ControllersFolder.ActionDispatcher),
 	require(ControllersFolder.StruggleController),
+	require(ControllersFolder.BreathHoldController),
 	require(ControllersFolder.InputController),
 	require(ControllersFolder.InteractionController),
 	require(ControllersFolder.RoundController),

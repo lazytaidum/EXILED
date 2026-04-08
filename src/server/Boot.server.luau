@@ -15,6 +15,7 @@ local bootOrder = {
 	require(ServicesFolder.MovementService),
 	require(ServicesFolder.StatusEffectService),
 	require(ServicesFolder.StruggleService),
+	require(ServicesFolder.BreathHoldService),
 	require(ServicesFolder.SpawnService),
 	require(ServicesFolder.ObjectiveService),
 	require(ServicesFolder.InteractionService),

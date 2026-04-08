@@ -11,6 +11,7 @@ local InputController = {}
 InputController.Name = "InputController"
 InputController.Dependencies = {
 	"StruggleController",
+	"BreathHoldController",
 }
 
 function InputController:Init()
@@ -19,6 +20,7 @@ function InputController:Init()
 	self.RequestInteractRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestInteract)
 	self.RequestMovementStateRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestMovementState)
 	self.RequestStruggleInputRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestStruggleInput)
+	self.RequestBreathHoldStateRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestBreathHoldState)
 	self.Keybinds = DefaultKeybinds.Keyboard or {}
 end
 
@@ -66,6 +68,14 @@ function InputController:_shouldIgnoreInput(input, gameProcessedEvent)
 		if actionToken == ActionToken.Sprint or actionToken == ActionToken.Crouch then
 			return false
 		end
+
+		if actionToken == ActionToken.PrimaryContextAction then
+			local hasPrompt = (self.StruggleController and self.StruggleController:IsActive())
+				or (self.BreathHoldController and self.BreathHoldController:IsActive())
+			if hasPrompt then
+				return false
+			end
+		end
 	end
 
 	return true
@@ -89,6 +99,12 @@ function InputController:_handleKeyboardInput(keyCode, isPressed)
 					self.StruggleController:RegisterLocalPress()
 					self:RequestStruggleInput()
 				end
+				return
+			end
+
+			if self.BreathHoldController and self.BreathHoldController:IsActive() then
+				DebugLog:Log("ClientInteraction", string.format("[InputController] Breath hold %s", isPressed and "started" or "ended"))
+				self.BreathHoldController:SetHolding(isPressed)
 				return
 			end
 
@@ -128,6 +144,10 @@ end
 
 function InputController:RequestStruggleInput()
 	self.RequestStruggleInputRemote:FireServer()
+end
+
+function InputController:RequestBreathHoldState(isHolding)
+	self.RequestBreathHoldStateRemote:FireServer(isHolding)
 end
 
 return InputController

@@ -41,19 +41,18 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		return
 	end
 
-	local character = self.CharacterService:GetCharacterByPlayer(player)
+	local character = self.World:GetCharacter(player)
 	if not character or not character:IsAlive() then
 		return
 	end
 
-	local statusService = self.StatusEffectService
-	if statusService and not statusService:CanUseAbilities(player) then
+	if not self.World:CanUseAbilities(player) then
 		return
 	end
 
 	if actionName == ActionName.Sprint then
-		if isActive and self.InteractionService and self.InteractionService:IsInteracting(player) then
-			self.InteractionService:InterruptInteraction(player, "Sprint")
+		if isActive and self.World:IsInteracting(player) then
+			self.World:InterruptInteraction(player, "Sprint")
 		end
 		character:SetSprinting(isActive)
 		if isActive then

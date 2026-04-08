@@ -6,6 +6,8 @@ local RemoteNames = {
 	InteractionStateChanged = "InteractionStateChanged",
 	RequestMovementState = "RequestMovementState",
 	StatusEffectsChanged = "StatusEffectsChanged",
+	RequestStruggleInput = "RequestStruggleInput",
+	StruggleStateChanged = "StruggleStateChanged",
 }
 
 return RemoteNames

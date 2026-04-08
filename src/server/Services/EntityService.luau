@@ -15,6 +15,7 @@ EntityService.Dependencies = {
 	"CharacterService",
 	"StatusEffectService",
 	"InteractionService",
+	"StruggleService",
 }
 
 local ENTITY_STATE = {
@@ -421,6 +422,11 @@ function EntityService:_tryBasicAttack(entity)
 		return
 	end
 
+	local statusService = self.StatusEffectService
+	if statusService and not statusService:CanUseAbilities(entity) then
+		return
+	end
+
 	local characterService = self.CharacterService
 	if not characterService then
 		return
@@ -438,7 +444,6 @@ function EntityService:_tryBasicAttack(entity)
 	local damageAmount = entity:GetScaledDamage(entity.Damage)
 	local didDamage = targetCharacter:ApplyDamage(damageAmount)
 	if didDamage then
-		local statusService = self.StatusEffectService
 		if statusService then
 			statusService:ApplyStatus(targetPlayer, StatusEffectId.Haste, {
 				Duration = 1.5,
@@ -451,6 +456,8 @@ function EntityService:_tryBasicAttack(entity)
 		if interactionService and interactionService:IsInteracting(targetPlayer) then
 			interactionService:InterruptInteraction(targetPlayer, "Damaged")
 		end
+
+		self:_executeBasicAttackEffects(entity, targetPlayer)
 	end
 
 	entity:MarkAttack()
@@ -461,6 +468,18 @@ function EntityService:_tryBasicAttack(entity)
 		targetPlayer.Name,
 		damageAmount
 	))
+end
+
+function EntityService:_executeBasicAttackEffects(entity, targetPlayer)
+	local basicAttack = entity.BasicAttack
+	if not basicAttack or not basicAttack.Effects then
+		return
+	end
+
+	local context = self:_createEffectContext(entity, targetPlayer, nil, nil)
+	for _, step in ipairs(basicAttack.Effects) do
+		self:_executeEffectStep(entity, step, context)
+	end
 end
 
 function EntityService:_createEffectContext(entity, targetPlayer, sourceStep, deltaTime)
@@ -605,6 +624,14 @@ function EntityService:_executeEffectStep(entity, step, context)
 				Tier = step.Tier,
 				Source = entity.DisplayName,
 			})
+		end
+	elseif stepType == "StartStruggle" then
+		if not self.StruggleService then
+			return
+		end
+
+		for _, target in ipairs(self:_resolveEffectTargets(entity, step, context)) do
+			self.StruggleService:BeginStruggle(entity, target, step)
 		end
 	end
 end

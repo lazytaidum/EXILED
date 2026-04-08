@@ -33,6 +33,12 @@ function RingWrapper.Attach(modules, ring, legacyFieldName)
 	end
 end
 
+function RingWrapper.AttachField(modules, fieldName, value)
+	for _, module in ipairs(modules) do
+		module[fieldName] = value
+	end
+end
+
 function RingWrapper.Boot(modules, legacyFieldName)
 	local ring = RingWrapper.CreateRing(modules)
 	RingWrapper.Attach(modules, ring, legacyFieldName)

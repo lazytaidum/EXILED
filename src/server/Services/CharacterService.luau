@@ -54,6 +54,8 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 	if oldCharacter then
 		self:_removeCharacter(player, oldCharacter.Model)
 	end
+
+	self:_disableDefaultCharacterScripts(characterModel)
 	
 	local character = BaseCharacter.new(player, characterModel, self.Services)
 	self.CharactersByPlayer[player] = character
@@ -91,6 +93,19 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 	end)
 	
 	DebugLog:Log("Character", "[CharacterService] Registered character for", player.Name)
+end
+
+function CharacterService:_disableDefaultCharacterScripts(characterModel)
+	local healthScript = characterModel:FindFirstChild("Health")
+	if healthScript and healthScript:IsA("Script") then
+		healthScript:Destroy()
+	end
+
+	characterModel.ChildAdded:Connect(function(child)
+		if child.Name == "Health" and child:IsA("Script") then
+			child:Destroy()
+		end
+	end)
 end
 
 function CharacterService:_onCharacterRemoving(player, characterModel)

@@ -1,4 +1,3 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
@@ -8,9 +7,9 @@ local StatusEffectController = {}
 StatusEffectController.Name = "StatusEffectController"
 
 function StatusEffectController:Init()
-	self.Player = Players.LocalPlayer
-	self.PlayerGui = self.Player:WaitForChild("PlayerGui")
-	self.Shared = ReplicatedStorage:WaitForChild("Shared")
+	self.Player = self.World.Player
+	self.PlayerGui = self.World.PlayerGui
+	self.Shared = self.World.Shared
 	self.Remotes = self.Shared:WaitForChild("Remotes")
 	self.Remote = self.Remotes:WaitForChild(RemoteNames.StatusEffectsChanged)
 	self.ActiveStatuses = {}

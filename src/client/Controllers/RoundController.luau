@@ -15,9 +15,8 @@ function RoundController:Init()
 end
 
 function RoundController:Start()
-	local remotesFolder = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes")
-	local roundStateChanged = remotesFolder:WaitForChild(RemoteNames.RoundStateChanged)
-	local roundTimerUpdated = remotesFolder:WaitForChild(RemoteNames.RoundTimerUpdated)
+	local roundStateChanged = self.World.Remotes:WaitForChild(RemoteNames.RoundStateChanged)
+	local roundTimerUpdated = self.World.Remotes:WaitForChild(RemoteNames.RoundTimerUpdated)
 
 	roundStateChanged.OnClientEvent:Connect(function(state)
 		self.CurrentState = {

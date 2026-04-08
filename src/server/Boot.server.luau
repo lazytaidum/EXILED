@@ -5,12 +5,14 @@ local ServicesFolder = ServerFolder:WaitForChild("Services")
 local ManagersFolder = ServerFolder:WaitForChild("Managers")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+local RingWrapper = require(ReplicatedStorage.Shared.Utility.RingWrapper)
 
 local bootOrder = {
 	require(ServicesFolder.RemoteRegistry),
 	require(ServicesFolder.PlayerService),
 	require(ServicesFolder.CharacterService),
 	require(ServicesFolder.MovementService),
+	require(ServicesFolder.StatusEffectService),
 	require(ServicesFolder.SpawnService),
 	require(ServicesFolder.ObjectiveService),
 	require(ServicesFolder.InteractionService),
@@ -19,22 +21,6 @@ local bootOrder = {
 	require(ManagersFolder.RoundManager),
 }
 
-local Services = {}
-
-for _, service in ipairs(bootOrder) do
-	Services[service.Name] = service
-end
-
-for _, service in ipairs(bootOrder) do
-	if service.Init then
-		service:Init(Services)
-	end
-end
-
-for _, service in ipairs(bootOrder) do
-	if service.Start then
-		service:Start()
-	end
-end
+local Services = RingWrapper.Boot(bootOrder, "Services")
 
 DebugLog:Log("Boot", "[Boot] Server boot complete.")

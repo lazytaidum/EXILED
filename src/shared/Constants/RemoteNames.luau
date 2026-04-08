@@ -5,6 +5,7 @@ local RemoteNames = {
 	RequestInteract = "RequestInteract",
 	InteractionStateChanged = "InteractionStateChanged",
 	RequestMovementState = "RequestMovementState",
+	StatusEffectsChanged = "StatusEffectsChanged",
 }
 
 return RemoteNames

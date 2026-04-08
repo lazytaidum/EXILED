@@ -7,6 +7,11 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local CharacterService = {}
 CharacterService.Name = "CharacterService"
+CharacterService.Dependencies = {
+	"PlayerService",
+	"RoundManager",
+	"StatusEffectService",
+}
 
 function CharacterService:Init(services)
 	self.Services = services
@@ -50,18 +55,18 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 		self:_removeCharacter(player, oldCharacter.Model)
 	end
 	
-	local character = BaseCharacter.new(player, characterModel)
+	local character = BaseCharacter.new(player, characterModel, self.Services)
 	self.CharactersByPlayer[player] = character
 	self.CharactersByModel[characterModel] = character
 	
-	local playerService = self.Services.PlayerService
+	local playerService = self.PlayerService
 	if playerService then
 		playerService:SetAlive(player, true)
 		playerService:SetMovementState(player, "IsSprinting", false)
 		playerService:SetMovementState(player, "IsCrouching", false)
 	end
 
-	local roundManager = self.Services.RoundManager
+	local roundManager = self.RoundManager
 	if roundManager then
 		roundManager:ApplyCurrentPhaseStateToPlayer(player)
 	end
@@ -71,14 +76,14 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 			DebugLog:Log("Character", "[CharacterService] Ignoring death for invincible character", player.Name)
 			return
 		end
-		local livePlayerService = self.Services.PlayerService
+		local livePlayerService = self.PlayerService
 		if livePlayerService then
 			livePlayerService:SetAlive(player, false)
 			livePlayerService:SetMovementState(player, "IsSprinting", false)
 			livePlayerService:SetMovementState(player, "IsCrouching", false)
 		end
 		
-		local liveRoundManager = self.Services.RoundManager
+		local liveRoundManager = self.RoundManager
 		if liveRoundManager and liveRoundManager:IsPlayerActive(player) then
 			liveRoundManager:SetPlayerEliminated(player)
 		end
@@ -105,11 +110,16 @@ function CharacterService:_removeCharacter(player, characterModel)
 		self.CharactersByModel[characterModel] = nil
 	end
 	
-	local playerService = self.Services.PlayerService
+	local playerService = self.PlayerService
 	if playerService then
 		playerService:SetAlive(player, false)
 		playerService:SetMovementState(player, "IsSprinting", false)
 		playerService:SetMovementState(player, "IsCrouching", false)
+	end
+
+	local statusEffectService = self.StatusEffectService
+	if statusEffectService then
+		statusEffectService:ClearStatuses(player)
 	end
 	
 	DebugLog:Log("Character", "[CharacterService] Removed character for", player.Name)

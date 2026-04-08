@@ -3,19 +3,20 @@ BaseEntity.__index = BaseEntity
 
 local ENTITY_STATE = {
 	Dormant = "Dormant",
-	Idle = "Idle",
-	Investigate = "Investigate",
+	Patrol = "Patrol",
+	Scout = "Scout",
 	Chase = "Chase",
 	Casting = "Casting",
 	Stunned = "Stunned",
 	Rage = "Rage",
 }
 
-function BaseEntity.new(model, definition)
+function BaseEntity.new(model, definition, services)
 	local self = setmetatable({}, BaseEntity)
 	
 	self.Model = model
 	self.Definition = definition or {}
+	self.Services = services
 	self.RootPart = model.PrimaryPart or model:WaitForChild("HumanoidRootPart")
 	
 	self.Id = self.Definition.Id or model.Name
@@ -82,7 +83,7 @@ function BaseEntity:SetActive(state)
 	self.IsActive = state
 	
 	if state then
-		self:EnterState(ENTITY_STATE.Idle)
+		self:EnterState(ENTITY_STATE.Patrol)
 	else
 		self:ResetRuntimeState()
 		self:EnterState(ENTITY_STATE.Dormant)
@@ -137,6 +138,16 @@ end
 function BaseEntity:IsCooldownReady(key)
 	local readyAt = self.Cooldowns[key]
 	return readyAt == nil or os.clock() >= readyAt
+end
+
+function BaseEntity:UpdateActiveEffects()
+	local now = os.clock()
+	for index = #self.ActiveEffects, 1, -1 do
+		local effect = self.ActiveEffects[index]
+		if effect.ExpiresAt <= now then
+			table.remove(self.ActiveEffects, index)
+		end
+	end
 end
 
 function BaseEntity:GetAbilityDefinitions()
@@ -212,6 +223,44 @@ function BaseEntity:ApplyPersistentModifier(modifierName, amount)
 	self.PersistentModifiers[modifierName] += amount
 end
 
+function BaseEntity:ApplyTimedModifier(modifierName, amount, duration, sourceKey)
+	table.insert(self.ActiveEffects, {
+		Modifier = modifierName,
+		Amount = amount,
+		ExpiresAt = os.clock() + duration,
+		SourceKey = sourceKey,
+	})
+end
+
+function BaseEntity:GetModifierValue(modifierName)
+	local total = self.PersistentModifiers[modifierName] or 0
+
+	for _, effect in ipairs(self.ActiveEffects) do
+		if effect.Modifier == modifierName then
+			total += effect.Amount
+		end
+	end
+
+	return total
+end
+
+function BaseEntity:GetScaledDamage(baseAmount)
+	local amount = baseAmount or self.Damage
+	local statusService = self.Services and self.Services.StatusEffectService
+	local statusPower = statusService and statusService:GetModifier(self, "Power") or 0
+	local weakness = statusService and statusService:GetModifier(self, "Weakness") or 0
+	return math.max(0, math.floor((amount * (1 + self:GetModifierValue("Power") + statusPower) * math.max(0, 1 - weakness)) + 0.5))
+end
+
+function BaseEntity:Heal(amount)
+	self.Health = math.clamp(self.Health + amount, 0, self.MaxHealth)
+	return self.Health
+end
+
+function BaseEntity:HealPercent(percent)
+	return self:Heal(self.MaxHealth * percent)
+end
+
 function BaseEntity:GetPosition()
 	if self.RootPart then
 		return self.RootPart.Position
@@ -284,15 +333,26 @@ function BaseEntity:ClearExpiredMemory()
 end
 
 function BaseEntity:GetMoveSpeed()
+	local haste = self:GetModifierValue("Haste")
+	local statusService = self.Services and self.Services.StatusEffectService
+	if statusService then
+		if statusService:HasFlag(self, "Stunned") then
+			return 0
+		end
+
+		haste += statusService:GetModifier(self, "Haste")
+	end
+
+	local hinder = statusService and statusService:GetModifier(self, "Hinder") or 0
 	if self.CurrentState == ENTITY_STATE.Chase or self.CurrentState == ENTITY_STATE.Rage then
-		return self.ChaseSpeed * (1 + self.PersistentModifiers.Haste)
+		return self.ChaseSpeed * (1 + haste) * math.max(0, 1 - hinder)
 	end
 
-	if self.CurrentState == ENTITY_STATE.Investigate then
-		return (self.ChaseSpeed * self.InvestigationSpeedMultiplier) * (1 + self.PersistentModifiers.Haste)
+	if self.CurrentState == ENTITY_STATE.Scout then
+		return (self.ChaseSpeed * self.InvestigationSpeedMultiplier) * (1 + haste) * math.max(0, 1 - hinder)
 	end
 
-	return self.WalkSpeed * (1 + self.PersistentModifiers.Haste)
+	return self.WalkSpeed * (1 + haste) * math.max(0, 1 - hinder)
 end
 
 function BaseEntity:GetStopDistance()
@@ -358,7 +418,7 @@ function BaseEntity:ResetToSpawn()
 	self.PersistentModifiers.Haste = 0
 	self.PersistentModifiers.Resistance = 0
 	self:ResetRuntimeState()
-	self:EnterState(self.IsActive and ENTITY_STATE.Idle or ENTITY_STATE.Dormant)
+	self:EnterState(self.IsActive and ENTITY_STATE.Patrol or ENTITY_STATE.Dormant)
 end
 
 function BaseEntity:Destroy()

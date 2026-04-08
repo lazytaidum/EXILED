@@ -6,6 +6,13 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local InteractionService = {}
 InteractionService.Name = "InteractionService"
+InteractionService.Dependencies = {
+	"RemoteRegistry",
+	"RoundManager",
+	"StatusEffectService",
+	"CharacterService",
+	"ObjectiveService",
+}
 
 function InteractionService:Init(services)
 	self.Services = services
@@ -13,10 +20,10 @@ function InteractionService:Init(services)
 end
 
 function InteractionService:Start()
-	self.InteractionStateRemote = self.Services.RemoteRegistry:GetRemote(RemoteNames.InteractionStateChanged)
+	self.InteractionStateRemote = self.RemoteRegistry:GetRemote(RemoteNames.InteractionStateChanged)
 	self.UpdateInterval = 0.1
 	
-	local requestInteract = self.Services.RemoteRegistry:GetRemote(RemoteNames.RequestInteract)
+	local requestInteract = self.RemoteRegistry:GetRemote(RemoteNames.RequestInteract)
 	
 	requestInteract.OnServerEvent:Connect(function(player, isStarting)
 		DebugLog:Log("Interaction", string.format("[InteractionService] Remote received from %s (start=%s)", player.Name, tostring(isStarting)))
@@ -35,9 +42,15 @@ function InteractionService:Start()
 end
 
 function InteractionService:StartInteraction(player)
-	local roundManager = self.Services.RoundManager
+	local roundManager = self.RoundManager
 	if not roundManager or not roundManager:IsReceptionActive() then
 		DebugLog:Log("Interaction", string.format("[InteractionService] Ignored start for %s: reception inactive", player.Name))
+		return
+	end
+
+	local statusService = self.StatusEffectService
+	if statusService and not statusService:CanInteract(player) then
+		DebugLog:Log("Interaction", string.format("[InteractionService] Ignored start for %s: status blocked", player.Name))
 		return
 	end
 	
@@ -51,7 +64,7 @@ function InteractionService:StartInteraction(player)
 		Target = target,
 	}
 	
-	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	local character = self.CharacterService:GetCharacterByPlayer(player)
 	if character then
 		character:SetSpeedMultiplier("InteractionSlow", 0.5)
 	end
@@ -71,7 +84,7 @@ function InteractionService:StopInteraction(player)
 		local target = self.ActiveInteractions[player].Target
 		local name = target and target.DisplayName or "Unknown"
 		
-		local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+		local character = self.CharacterService:GetCharacterByPlayer(player)
 		if character then
 			character:SetSpeedMultiplier("InteractionSlow", nil)
 		end
@@ -107,7 +120,7 @@ function InteractionService:IsInteracting(player)
 end
 
 function InteractionService:FindBestInteractable(player)
-	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	local character = self.CharacterService:GetCharacterByPlayer(player)
 	if not character or not character.RootPart then
 		return nil
 	end
@@ -116,7 +129,7 @@ function InteractionService:FindBestInteractable(player)
 	local bestTarget = nil
 	local bestDistance = math.huge
 	
-	for _, objective in ipairs(self.Services.ObjectiveService:GetObjectives()) do
+	for _, objective in ipairs(self.ObjectiveService:GetObjectives()) do
 		if objective.Type == InteractableType.Objective or objective.Type == "MapObjective" then
 			if objective:CanInteract() and objective.Instance then
 				local distance = (objective.Instance.Position - playerPosition).Magnitude
@@ -157,7 +170,7 @@ function InteractionService:_updateInteraction(player, interaction)
 		return
 	end
 	
-	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	local character = self.CharacterService:GetCharacterByPlayer(player)
 	if not character or not character.RootPart then
 		self:StopInteraction(player)
 		return
@@ -171,7 +184,7 @@ function InteractionService:_updateInteraction(player, interaction)
 	end
 	
 	local amount = target.ChargeRate * self.UpdateInterval
-	local progressed = self.Services.ObjectiveService:ProgressObjective(target, amount)
+	local progressed = self.ObjectiveService:ProgressObjective(target, amount)
 	
 	self.InteractionStateRemote:FireClient(player, {
 		State = "Update",

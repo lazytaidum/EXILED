@@ -5,6 +5,7 @@ local DebugFlags = {
 	ObjectiveProgress = false,
 	Interaction = true,
 	Movement = true,
+	Status = true,
 	Entity = true,
 	Character = false,
 	Player = false,
@@ -12,6 +13,7 @@ local DebugFlags = {
 	ClientRound = false,
 	ClientInteraction = true,
 	ClientMovement = true,
+	ClientStatus = true,
 }
 
 return DebugFlags

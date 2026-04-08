@@ -1,11 +1,12 @@
 local BaseCharacter = {}
 BaseCharacter.__index = BaseCharacter
 
-function BaseCharacter.new(player, model)
+function BaseCharacter.new(player, model, services)
 	local self = setmetatable({}, BaseCharacter)
 	
 	self.Player = player
 	self.Model = model
+	self.Services = services
 	self.Humanoid = model:WaitForChild("Humanoid")
 	self.RootPart = model:WaitForChild("HumanoidRootPart")
 	
@@ -47,12 +48,30 @@ function BaseCharacter:_getCombinedSpeedMultiplier()
 	return boostMultiplier * slowMultiplier
 end
 
+function BaseCharacter:_getStatusModifier(modifierName)
+	local statusService = self.Services and self.Services.StatusEffectService
+	if not statusService then
+		return 0
+	end
+
+	return statusService:GetModifier(self.Player, modifierName)
+end
+
+function BaseCharacter:_hasStatusFlag(flagName)
+	local statusService = self.Services and self.Services.StatusEffectService
+	if not statusService then
+		return false
+	end
+
+	return statusService:HasFlag(self.Player, flagName)
+end
+
 function BaseCharacter:_refreshMovement()
 	if not self.Humanoid then
 		return
 	end
 	
-	if self.IsFrozen then
+	if self.IsFrozen or self:_hasStatusFlag("Stunned") then
 		self.Humanoid.WalkSpeed = 0
 		self.Humanoid.JumpPower = 0
 		self.Humanoid.HipHeight = self.DefaultHipHeight
@@ -73,6 +92,9 @@ function BaseCharacter:_refreshMovement()
 		self.Humanoid.JumpPower = self.DefaultJumpPower
 		self.Humanoid.HipHeight = self.DefaultHipHeight
 	end
+
+	movementMultiplier *= (1 + self:_getStatusModifier("Haste"))
+	movementMultiplier *= math.max(0, 1 - self:_getStatusModifier("Hinder"))
 
 	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * movementMultiplier
 	self.Humanoid.AutoRotate = true
@@ -181,22 +203,47 @@ function BaseCharacter:SetInvincible(state)
 	end
 end
 
-function BaseCharacter:ApplyDamage(amount)
-	if self.IsInvincible then
+function BaseCharacter:ApplyDamage(amount, options)
+	options = options or {}
+	if self.IsInvincible and not options.IgnoreInvincible then
 		return false
 	end
 	
 	if self.Humanoid then
-		self.Humanoid:TakeDamage(amount)
+		local finalAmount = amount
+		if not options.IsStatusEffect then
+			finalAmount *= (1 + self:_getStatusModifier("Fragility"))
+			finalAmount *= math.max(0, 1 - self:_getStatusModifier("Resistance"))
+		end
+
+		finalAmount = math.max(0, finalAmount)
+		if finalAmount <= 0 then
+			return false
+		end
+
+		if options.CanFatal == false then
+			local minimumHealth = options.MinimumHealth or 1
+			finalAmount = math.min(finalAmount, math.max(0, self.Humanoid.Health - minimumHealth))
+			if finalAmount <= 0 then
+				return false
+			end
+		end
+
+		self.Humanoid:TakeDamage(finalAmount)
 		return true
 	end
 	
 	return false
 end
 
+function BaseCharacter:RefreshFromStatusEffects()
+	self:_refreshMovement()
+end
+
 function BaseCharacter:Destroy()
 	self.Player = nil
 	self.Model = nil
+	self.Services = nil
 	self.Humanoid = nil
 	self.RootPart = nil
 end

@@ -6,6 +6,13 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local MovementService = {}
 MovementService.Name = "MovementService"
+MovementService.Dependencies = {
+	"RemoteRegistry",
+	"CharacterService",
+	"StatusEffectService",
+	"InteractionService",
+	"PlayerService",
+}
 
 local MOVEMENT_STATE_KEYS = {
 	[ActionName.Sprint] = "IsSprinting",
@@ -17,7 +24,7 @@ function MovementService:Init(services)
 end
 
 function MovementService:Start()
-	local requestMovementState = self.Services.RemoteRegistry:GetRemote(RemoteNames.RequestMovementState)
+	local requestMovementState = self.RemoteRegistry:GetRemote(RemoteNames.RequestMovementState)
 	requestMovementState.OnServerEvent:Connect(function(player, actionName, isActive)
 		self:HandleMovementRequest(player, actionName, isActive)
 	end)
@@ -34,14 +41,19 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		return
 	end
 
-	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	local character = self.CharacterService:GetCharacterByPlayer(player)
 	if not character or not character:IsAlive() then
 		return
 	end
 
+	local statusService = self.StatusEffectService
+	if statusService and not statusService:CanUseAbilities(player) then
+		return
+	end
+
 	if actionName == ActionName.Sprint then
-		if isActive and self.Services.InteractionService and self.Services.InteractionService:IsInteracting(player) then
-			self.Services.InteractionService:InterruptInteraction(player, "Sprint")
+		if isActive and self.InteractionService and self.InteractionService:IsInteracting(player) then
+			self.InteractionService:InterruptInteraction(player, "Sprint")
 		end
 		character:SetSprinting(isActive)
 		if isActive then
@@ -55,7 +67,7 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 	end
 
 	local stateKey = MOVEMENT_STATE_KEYS[actionName]
-	local playerService = self.Services.PlayerService
+	local playerService = self.PlayerService
 	if playerService and stateKey then
 		playerService:SetMovementState(player, stateKey, isActive)
 

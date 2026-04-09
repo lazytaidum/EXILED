@@ -189,6 +189,7 @@ function EntityService:_updateTargetSelection(entity, bestCandidate)
 
 	entity:SetTarget(bestCandidate.Player, bestCandidate.Position, bestCandidate.IsVisible)
 	if bestCandidate.IsVisible then
+		entity:EndSearchMode()
 		entity:RememberTarget(bestCandidate.Player, bestCandidate.Position, true)
 	end
 end
@@ -201,6 +202,9 @@ function EntityService:_updateEntityState(entity)
 
 	local targetPlayer = entity:GetTarget()
 	if not targetPlayer then
+		if entity:GetState() ~= ENTITY_STATE.Patrol then
+			entity:PickPatrolDestination()
+		end
 		entity:EnterState(ENTITY_STATE.Patrol)
 		return
 	end
@@ -208,6 +212,7 @@ function EntityService:_updateEntityState(entity)
 	local memory = entity:GetTargetMemory(targetPlayer)
 	if not memory then
 		entity:SetTarget(nil)
+		entity:PickPatrolDestination()
 		entity:EnterState(ENTITY_STATE.Patrol)
 		return
 	end
@@ -298,20 +303,29 @@ end
 
 function EntityService:_selectAbility(entity, candidates)
 	local abilities = entity:GetAbilityDefinitions()
-	for _, abilityId in ipairs(entity:GetAbilityOrder()) do
-		local ability = abilities[abilityId]
-		if ability and entity:CanUseAbility(abilityId) and self:_canUseAbility(entity, ability, candidates) then
-			return abilityId, ability
-		end
+	local available = {}
+	local orderIndexById = {}
+
+	for index, abilityId in ipairs(entity:GetAbilityOrder()) do
+		orderIndexById[abilityId] = index
 	end
 
 	for abilityId, ability in pairs(abilities) do
 		if entity:CanUseAbility(abilityId) and self:_canUseAbility(entity, ability, candidates) then
-			return abilityId, ability
+			table.insert(available, {
+				Id = abilityId,
+				Ability = ability,
+				Weight = self:_scoreAbilitySelection(entity, abilityId, ability, candidates),
+				OrderIndex = orderIndexById[abilityId] or math.huge,
+			})
 		end
 	end
 
-	return nil, nil
+	if #available == 0 then
+		return nil, nil
+	end
+
+	return self:_pickWeightedAbility(entity, available)
 end
 
 function EntityService:_canUseAbility(entity, ability, candidates)
@@ -351,6 +365,10 @@ function EntityService:_canUseAbility(entity, ability, candidates)
 		return false
 	end
 
+	if ability.MaxVisibleTargets and self:_countVisibleTargets(entity) > ability.MaxVisibleTargets then
+		return false
+	end
+
 	if ability.Range then
 		local targetPlayer = entity:GetTarget()
 		if not targetPlayer then
@@ -367,7 +385,123 @@ function EntityService:_canUseAbility(entity, ability, candidates)
 		end
 	end
 
-	return #candidates > 0 or not ability.RequireAnyCandidate
+	local targetDistance = self:_getTargetDistance(entity, entity:GetTarget())
+	if ability.MinTargetDistance and (targetDistance == nil or targetDistance < ability.MinTargetDistance) then
+		return false
+	end
+
+	if ability.MaxTargetDistance and (targetDistance == nil or targetDistance > ability.MaxTargetDistance) then
+		return false
+	end
+
+	if ability.RequireSearchMode and not entity:IsSearchModeActive(ability.RequireSearchMode == true and nil or ability.RequireSearchMode) then
+		return false
+	end
+
+	if ability.ForbidSearchMode and entity.SearchMode then
+		return false
+	end
+
+	if ability.RequireTargetMemory and not entity:GetTargetMemory(entity:GetTarget()) then
+		return false
+	end
+
+	if ability.RequireStateEntry then
+		local stateName = ability.RequireStateEntry.State or ability.RequireStateEntry
+		local window = type(ability.RequireStateEntry) == "table" and ability.RequireStateEntry.Window or nil
+		if not entity:JustEnteredState(stateName, window) then
+			return false
+		end
+	end
+
+	if ability.RequireEnteredChase and not entity:JustEnteredState(ENTITY_STATE.Chase, ability.RequireEnteredChaseWindow or 0.5) then
+		return false
+	end
+
+	if ability.Chance and entity.Random:NextNumber() > ability.Chance then
+		return false
+	end
+
+	if ability.RequireAnyCandidate == true and #candidates <= 0 then
+		return false
+	end
+
+	return true
+end
+
+function EntityService:_scoreAbilitySelection(entity, abilityId, ability, candidates)
+	local weight = ability.Weight or 1
+	local targetDistance = self:_getTargetDistance(entity, entity:GetTarget())
+
+	if ability.Priority then
+		weight += ability.Priority
+	end
+
+	if ability.PreferOnChaseEntry and entity:JustEnteredState(ENTITY_STATE.Chase, ability.ChaseEntryWindow or 0.5) then
+		weight += ability.PreferOnChaseEntry
+	end
+
+	if ability.PreferVisibleTargets and self:_countVisibleTargets(entity) > 0 then
+		weight += ability.PreferVisibleTargets
+	end
+
+	if ability.PreferDistanceBelow and targetDistance and targetDistance <= ability.PreferDistanceBelow then
+		weight += ability.PreferDistanceBelowBonus or 1
+	end
+
+	if ability.PreferDistanceAbove and targetDistance and targetDistance >= ability.PreferDistanceAbove then
+		weight += ability.PreferDistanceAboveBonus or 1
+	end
+
+	if ability.PreferSearchMode and entity.SearchMode then
+		weight += ability.PreferSearchMode
+	end
+
+	if ability.PreferNoTarget and not entity:GetTarget() then
+		weight += ability.PreferNoTarget
+	end
+
+	return math.max(0.01, weight)
+end
+
+function EntityService:_pickWeightedAbility(entity, available)
+	table.sort(available, function(a, b)
+		if a.Weight == b.Weight then
+			return a.OrderIndex < b.OrderIndex
+		end
+		return a.Weight > b.Weight
+	end)
+
+	local totalWeight = 0
+	for _, entry in ipairs(available) do
+		totalWeight += entry.Weight
+	end
+
+	local roll = entity.Random:NextNumber(0, totalWeight)
+	local cursor = 0
+	for _, entry in ipairs(available) do
+		cursor += entry.Weight
+		if roll <= cursor then
+			return entry.Id, entry.Ability
+		end
+	end
+
+	local fallback = available[1]
+	return fallback.Id, fallback.Ability
+end
+
+function EntityService:_getTargetDistance(entity, targetPlayer)
+	if not targetPlayer then
+		return nil
+	end
+
+	local targetCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+	local entityPosition = entity:GetPosition()
+	if not targetCharacter or not targetCharacter.RootPart or not entityPosition then
+		return nil
+	end
+
+	return (targetCharacter.RootPart.Position - entityPosition).Magnitude
 end
 
 function EntityService:_selectAbilityTarget(entity, ability, candidates)
@@ -407,14 +541,71 @@ function EntityService:_updateEntityMovement(entity, deltaTime)
 	end
 
 	local state = entity:GetState()
-	if state ~= ENTITY_STATE.Chase and state ~= ENTITY_STATE.Scout and state ~= ENTITY_STATE.Rage then
+	if state == ENTITY_STATE.Patrol then
+		self:_updatePatrolMovement(entity, deltaTime)
+	elseif state == ENTITY_STATE.Scout then
+		self:_updateScoutMovement(entity, deltaTime)
+	elseif state == ENTITY_STATE.Chase or state == ENTITY_STATE.Rage then
+		local destination = entity:GetTargetLastKnownPosition()
+		if destination then
+			entity:MoveToward(destination, deltaTime)
+		end
+	end
+end
+
+function EntityService:_updatePatrolMovement(entity, deltaTime)
+	if entity.SearchMode and not entity:IsSearchModeActive() then
+		entity:EndSearchMode()
+	end
+
+	if entity:IsPatrolPaused() then
 		return
 	end
 
-	local destination = entity:GetTargetLastKnownPosition()
-	if destination then
-		entity:MoveToward(destination, deltaTime)
+	local destination = entity:GetPatrolDestination()
+	if not destination then
+		destination = entity:PickPatrolDestination()
 	end
+
+	if not destination then
+		return
+	end
+
+	if entity:HasReachedPatrolDestination() then
+		if entity.SearchMode then
+			entity:PickPatrolDestination()
+		else
+			entity:MarkPatrolPause()
+			entity:PickPatrolDestination()
+		end
+		return
+	end
+
+	entity:MoveToward(destination, deltaTime)
+end
+
+function EntityService:_updateScoutMovement(entity, deltaTime)
+	local destination = entity:GetTargetLastKnownPosition()
+	if not destination then
+		entity:ClearScoutArrival()
+		entity:SetTarget(nil)
+		entity:EnterState(ENTITY_STATE.Patrol)
+		return
+	end
+
+	if entity:HasReachedScoutDestination() then
+		entity:MarkScoutArrival()
+		if entity:HasFinishedScoutLinger() then
+			entity:ClearScoutArrival()
+			entity:SetTarget(nil)
+			entity:EnterState(ENTITY_STATE.Patrol)
+			entity:PickPatrolDestination()
+		end
+		return
+	end
+
+	entity:ClearScoutArrival()
+	entity:MoveToward(destination, deltaTime)
 end
 
 function EntityService:_tryBasicAttack(entity)
@@ -459,6 +650,7 @@ function EntityService:_tryBasicAttack(entity)
 		end
 
 		self:_executeBasicAttackEffects(entity, targetPlayer)
+		self:_handleTargetDowned(entity, targetPlayer, targetCharacter)
 	end
 
 	entity:MarkAttack()
@@ -640,6 +832,11 @@ function EntityService:_executeEffectStep(entity, step, context)
 		end
 
 		self.BreathHoldService:BeginChallenge(entity, step)
+	elseif stepType == "StartSearchMode" then
+		local searchId = step.SearchId or "SearchMode"
+		local duration = step.Duration or 0
+		entity:BeginSearchMode(searchId, duration)
+		entity:PickPatrolDestination()
 	end
 end
 
@@ -696,6 +893,27 @@ function EntityService:_damageTargetFromEffect(entity, player, step)
 			})
 		end
 	end
+
+	self:_handleTargetDowned(entity, player, character)
+end
+
+function EntityService:_handleTargetDowned(entity, targetPlayer, targetCharacter)
+	if not entity or not targetPlayer or not targetCharacter or targetCharacter:IsAlive() then
+		return false
+	end
+
+	if entity.DownedPlayers[targetPlayer] then
+		return false
+	end
+
+	entity.DownedPlayers[targetPlayer] = true
+	entity:TriggerPassives("OnDown", {
+		Player = targetPlayer,
+		Character = targetCharacter,
+	})
+
+	DebugLog:Log("Entity", string.format("[EntityService] %s downed %s", entity.DisplayName, targetPlayer.Name))
+	return true
 end
 
 function EntityService:_collectVisiblePlayers(entity)

@@ -71,7 +71,7 @@ function InputController:_shouldIgnoreInput(input, gameProcessedEvent)
 
 		if actionToken == ActionToken.PrimaryContextAction then
 			local hasPrompt = (self.StruggleController and self.StruggleController:IsActive())
-				or (self.BreathHoldController and self.BreathHoldController:IsActive())
+				or (self.BreathHoldController and self.BreathHoldController:RequiresHoldInput())
 			if hasPrompt then
 				return false
 			end
@@ -102,7 +102,7 @@ function InputController:_handleKeyboardInput(keyCode, isPressed)
 				return
 			end
 
-			if self.BreathHoldController and self.BreathHoldController:IsActive() then
+			if self.BreathHoldController and self.BreathHoldController:RequiresHoldInput() then
 				DebugLog:Log("ClientInteraction", string.format("[InputController] Breath hold %s", isPressed and "started" or "ended"))
 				self.BreathHoldController:SetHolding(isPressed)
 				return

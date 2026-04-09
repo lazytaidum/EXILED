@@ -1,8 +1,8 @@
 local RoundConfig = {
-	IntermissionDuration = 5,
-	VotingDuration = 5,
-	PreparationDuration = 5,
-	ReceptionDuration = 20,
+	IntermissionDuration = 2,
+	VotingDuration = 2,
+	PreparationDuration = 2,
+	ReceptionDuration = 50,
 	ResultsDuration = 5,
 }
 

@@ -29,6 +29,7 @@ function BaseEntity.new(model, definition, services)
 	local stats = self.Definition.Stats or {}
 	local perception = self.Definition.Perception or {}
 	local targeting = self.Definition.Targeting or {}
+	local navigation = self.Definition.Navigation or {}
 	local actions = self.Definition.Actions or {}
 	
 	self.IsActive = false
@@ -48,6 +49,11 @@ function BaseEntity.new(model, definition, services)
 	self.MemoryBonus = targeting.MemoryBonus or 12
 	self.DistanceWeight = targeting.DistanceWeight or 1
 	self.StopDistance = targeting.StopDistance or math.max(self.AttackRange * 0.5, 2)
+	self.PatrolRadius = navigation.PatrolRadius or 28
+	self.PatrolPointMinDistance = navigation.PatrolPointMinDistance or 8
+	self.PatrolPauseDuration = navigation.PatrolPauseDuration or 1.2
+	self.ScoutLingerDuration = navigation.ScoutLingerDuration or 1.25
+	self.SearchSpeedMultiplier = navigation.SearchSpeedMultiplier or 1.5
 	self.BasicAttack = actions.BasicAttack or {
 		Id = "BasicAttack",
 		Kind = "BasicAttack",
@@ -60,11 +66,18 @@ function BaseEntity.new(model, definition, services)
 	
 	self.LastAttackTime = 0
 	self.LastStateChangeTime = os.clock()
+	self.PreviousState = ENTITY_STATE.Dormant
 	self.CurrentState = ENTITY_STATE.Dormant
+	self.Random = Random.new()
 	self.TargetPlayer = nil
 	self.TargetLastKnownPosition = nil
 	self.TargetLastSeenAt = nil
 	self.TargetMemory = {}
+	self.PatrolDestination = nil
+	self.PatrolPauseUntil = 0
+	self.ScoutArrivalTime = nil
+	self.SearchMode = nil
+	self.DownedPlayers = {}
 	self.Cooldowns = {}
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
@@ -109,12 +122,31 @@ function BaseEntity:EnterState(stateName)
 		return
 	end
 
+	self.PreviousState = self.CurrentState
 	self.CurrentState = stateName
 	self.LastStateChangeTime = os.clock()
+
+	if stateName == ENTITY_STATE.Patrol then
+		self.ScoutArrivalTime = nil
+	elseif stateName == ENTITY_STATE.Scout then
+		self.PatrolDestination = nil
+		self.PatrolPauseUntil = 0
+	elseif stateName == ENTITY_STATE.Chase then
+		self.ScoutArrivalTime = nil
+	end
 end
 
 function BaseEntity:GetStateDuration()
 	return os.clock() - self.LastStateChangeTime
+end
+
+function BaseEntity:JustEnteredState(stateName, window)
+	window = window or 0.4
+	return self.CurrentState == stateName and self:GetStateDuration() <= window
+end
+
+function BaseEntity:EnteredCurrentStateFrom(stateName)
+	return self.PreviousState == stateName
 end
 
 function BaseEntity:CanAttack()
@@ -160,6 +192,20 @@ end
 
 function BaseEntity:GetPassiveDefinitions()
 	return self.Passives
+end
+
+function BaseEntity:TriggerPassives(triggerName, context)
+	for _, passive in pairs(self.Passives) do
+		if passive.Trigger ~= triggerName then
+			continue
+		end
+
+		for _, step in ipairs(passive.Effects or {}) do
+			if step.Type == "ApplyPersistentModifierSelf" and step.Modifier and step.Amount then
+				self:ApplyPersistentModifier(step.Modifier, step.Amount)
+			end
+		end
+	end
 end
 
 function BaseEntity:GetActionCooldown(actionId)
@@ -287,6 +333,10 @@ function BaseEntity:GetTargetLastKnownPosition()
 	return self.TargetLastKnownPosition
 end
 
+function BaseEntity:GetSpawnPosition()
+	return self.SpawnCFrame and self.SpawnCFrame.Position or self:GetPosition()
+end
+
 function BaseEntity:RememberTarget(player, position, wasVisible)
 	if not player or not position then
 		return
@@ -332,6 +382,77 @@ function BaseEntity:ClearExpiredMemory()
 	end
 end
 
+function BaseEntity:GetPatrolDestination()
+	return self.PatrolDestination
+end
+
+function BaseEntity:SetPatrolDestination(position)
+	self.PatrolDestination = position
+end
+
+function BaseEntity:ClearPatrolDestination()
+	self.PatrolDestination = nil
+end
+
+function BaseEntity:IsNearPosition(position, range)
+	local entityPosition = self:GetPosition()
+	if not entityPosition or not position then
+		return false
+	end
+
+	return (position - entityPosition).Magnitude <= (range or self.StopDistance)
+end
+
+function BaseEntity:HasReachedPatrolDestination()
+	return self.PatrolDestination ~= nil and self:IsNearPosition(self.PatrolDestination, self.StopDistance + 0.5)
+end
+
+function BaseEntity:HasReachedScoutDestination()
+	return self.TargetLastKnownPosition ~= nil and self:IsNearPosition(self.TargetLastKnownPosition, self.StopDistance + 0.5)
+end
+
+function BaseEntity:MarkPatrolPause(duration)
+	self.PatrolPauseUntil = os.clock() + (duration or self.PatrolPauseDuration)
+end
+
+function BaseEntity:IsPatrolPaused()
+	return os.clock() < (self.PatrolPauseUntil or 0)
+end
+
+function BaseEntity:MarkScoutArrival()
+	if not self.ScoutArrivalTime then
+		self.ScoutArrivalTime = os.clock()
+	end
+end
+
+function BaseEntity:ClearScoutArrival()
+	self.ScoutArrivalTime = nil
+end
+
+function BaseEntity:HasFinishedScoutLinger()
+	return self.ScoutArrivalTime ~= nil and (os.clock() - self.ScoutArrivalTime) >= self.ScoutLingerDuration
+end
+
+function BaseEntity:PickPatrolDestination()
+	local origin = self:GetSpawnPosition()
+	if not origin then
+		return nil
+	end
+
+	for _ = 1, 8 do
+		local angle = self.Random:NextNumber(0, math.pi * 2)
+		local distance = self.Random:NextNumber(self.PatrolPointMinDistance, self.PatrolRadius)
+		local candidate = origin + Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
+		if not self:IsNearPosition(candidate, self.PatrolPointMinDistance * 0.75) then
+			self.PatrolDestination = candidate
+			return candidate
+		end
+	end
+
+	self.PatrolDestination = origin
+	return origin
+end
+
 function BaseEntity:GetMoveSpeed()
 	local haste = self:GetModifierValue("Haste")
 	local statusService = self.Services and self.Services.StatusEffectService
@@ -344,6 +465,10 @@ function BaseEntity:GetMoveSpeed()
 	end
 
 	local hinder = statusService and statusService:GetModifier(self, "Hinder") or 0
+	if self.SearchMode then
+		return (self.ChaseSpeed * self.SearchSpeedMultiplier) * (1 + haste) * math.max(0, 1 - hinder)
+	end
+
 	if self.CurrentState == ENTITY_STATE.Chase or self.CurrentState == ENTITY_STATE.Rage then
 		return self.ChaseSpeed * (1 + haste) * math.max(0, 1 - hinder)
 	end
@@ -398,10 +523,16 @@ function BaseEntity:IsInRange(position, range)
 end
 
 function BaseEntity:ResetRuntimeState()
+	self.PreviousState = ENTITY_STATE.Dormant
 	self.TargetPlayer = nil
 	self.TargetLastKnownPosition = nil
 	self.TargetLastSeenAt = nil
 	self.TargetMemory = {}
+	self.PatrolDestination = nil
+	self.PatrolPauseUntil = 0
+	self.ScoutArrivalTime = nil
+	self.SearchMode = nil
+	self.DownedPlayers = {}
 	self.Cooldowns = {}
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
@@ -426,6 +557,37 @@ function BaseEntity:Destroy()
 	self.Definition = nil
 	self.RootPart = nil
 	self.TargetPlayer = nil
+end
+
+function BaseEntity:BeginSearchMode(searchId, duration)
+	self.SearchMode = {
+		Id = searchId,
+		EndsAt = os.clock() + duration,
+	}
+end
+
+function BaseEntity:IsSearchModeActive(searchId)
+	if not self.SearchMode then
+		return false
+	end
+
+	if searchId ~= nil and self.SearchMode.Id ~= searchId then
+		return false
+	end
+
+	return os.clock() < self.SearchMode.EndsAt
+end
+
+function BaseEntity:EndSearchMode(searchId)
+	if not self.SearchMode then
+		return
+	end
+
+	if searchId ~= nil and self.SearchMode.Id ~= searchId then
+		return
+	end
+
+	self.SearchMode = nil
 end
 
 return BaseEntity

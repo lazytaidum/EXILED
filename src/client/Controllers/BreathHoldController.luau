@@ -1,3 +1,4 @@
+local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
@@ -8,9 +9,11 @@ BreathHoldController.Name = "BreathHoldController"
 
 function BreathHoldController:Init()
 	self.Active = false
+	self.Mode = "Idle"
 	self.IsHolding = false
 	self.RemainingDuration = 0
-	self.Progress = 0
+	self.Breath = 1
+	self.IndicatorToken = 0
 	self.Remote = self.World.Remotes:WaitForChild(RemoteNames.BreathHoldStateChanged)
 	self.RequestRemote = self.World.Remotes:WaitForChild(RemoteNames.RequestBreathHoldState)
 end
@@ -36,6 +39,10 @@ function BreathHoldController:IsActive()
 	return self.Active
 end
 
+function BreathHoldController:RequiresHoldInput()
+	return self.Active and self.Mode == "Challenge"
+end
+
 function BreathHoldController:SetHolding(isHolding)
 	if not self.Active or self.IsHolding == isHolding then
 		return
@@ -48,20 +55,36 @@ end
 
 function BreathHoldController:_handleRemote(payload)
 	local state = payload and payload.State
-	if state == "Start" or state == "Update" then
+	if state == "Indicator" then
 		self.Active = true
+		self.Mode = "Indicator"
+		self.IsHolding = false
+		self.RemainingDuration = payload.Duration or 0
+		self.Breath = 1
+		self.UI.Root.Enabled = true
+		self.UI.Label.Text = payload.Prompt or "Breathless Hunt"
+		self.UI.SubLabel.Text = payload.SubPrompt or "Be ready to hold your breath"
+		self.UI.KeyLabel.Text = payload.RequiredKey or "GET READY"
+		self:_playIndicatorVfx(self.RemainingDuration)
+		self:_refreshVisuals()
+	elseif state == "Start" or state == "Update" then
+		self.Active = true
+		self.Mode = "Challenge"
 		self.RemainingDuration = payload.Duration or self.RemainingDuration
-		self.Progress = payload.Progress or self.Progress
+		self.Breath = payload.Breath or self.Breath
 		self.UI.Root.Enabled = true
 		self.UI.Label.Text = payload.Prompt or "Hold your breath"
-		self.UI.SubLabel.Text = payload.SubPrompt or "Stay silent"
+		self.UI.SubLabel.Text = payload.SubPrompt or "Conserve your breath"
 		self.UI.KeyLabel.Text = payload.RequiredKey or "SPACE"
 		self:_refreshVisuals()
 	else
 		self.Active = false
+		self.Mode = "Idle"
 		self.IsHolding = false
 		self.RemainingDuration = 0
-		self.Progress = 0
+		self.Breath = 1
+		self.IndicatorToken += 1
+		self:_setIndicatorVisible(false)
 		self.UI.Root.Enabled = false
 	end
 end
@@ -78,11 +101,28 @@ function BreathHoldController:_updateUi(deltaTime)
 end
 
 function BreathHoldController:_refreshVisuals()
-	local ratio = math.clamp(self.Progress or 0, 0, 1)
+	local ratio = math.clamp(self.Breath or 0, 0, 1)
 	self.UI.Bar.Size = UDim2.new(ratio, 0, 1, 0)
-	self.UI.ProgressLabel.Text = self.IsHolding and "Holding" or "Release = fail"
+
+	if self.Mode == "Indicator" then
+		self.UI.ProgressLabel.Text = "Warning"
+		self.UI.KeyLabel.BackgroundColor3 = Color3.fromRGB(88, 103, 122)
+		self.UI.KeyLabel.TextColor3 = Color3.fromRGB(220, 230, 236)
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(176, 188, 198)
+		self.UI.Duration.TextColor3 = Color3.fromRGB(220, 230, 236)
+		return
+	end
+
+	self.UI.ProgressLabel.Text = string.format("Breath %d%%", math.floor((ratio * 100) + 0.5))
 	self.UI.KeyLabel.BackgroundColor3 = self.IsHolding and Color3.fromRGB(132, 183, 150) or Color3.fromRGB(61, 72, 84)
 	self.UI.KeyLabel.TextColor3 = self.IsHolding and Color3.fromRGB(18, 19, 24) or Color3.fromRGB(220, 230, 236)
+	if ratio <= 0.2 then
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(222, 108, 108)
+	elseif ratio <= 0.45 then
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(226, 177, 90)
+	else
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(132, 183, 150)
+	end
 end
 
 function BreathHoldController:_createUI()
@@ -90,7 +130,39 @@ function BreathHoldController:_createUI()
 	screenGui.Name = "BreathHoldUI"
 	screenGui.Enabled = false
 	screenGui.ResetOnSpawn = false
+	screenGui.DisplayOrder = 20
 	screenGui.Parent = self.World.PlayerGui
+
+	local fogOverlay = Instance.new("Frame")
+	fogOverlay.Name = "FogOverlay"
+	fogOverlay.Size = UDim2.fromScale(1, 1)
+	fogOverlay.BackgroundColor3 = Color3.fromRGB(190, 204, 214)
+	fogOverlay.BackgroundTransparency = 1
+	fogOverlay.BorderSizePixel = 0
+	fogOverlay.Visible = false
+	fogOverlay.Parent = screenGui
+
+	local fogBand = Instance.new("Frame")
+	fogBand.Name = "FogBand"
+	fogBand.AnchorPoint = Vector2.new(0.5, 0)
+	fogBand.Position = UDim2.fromScale(0.5, -0.55)
+	fogBand.Size = UDim2.fromScale(1.4, 0.42)
+	fogBand.BackgroundColor3 = Color3.fromRGB(214, 224, 232)
+	fogBand.BackgroundTransparency = 0.35
+	fogBand.BorderSizePixel = 0
+	fogBand.Visible = false
+	fogBand.Parent = screenGui
+
+	local fogGradient = Instance.new("UIGradient")
+	fogGradient.Rotation = 90
+	fogGradient.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(0.18, 0.55),
+		NumberSequenceKeypoint.new(0.5, 0.2),
+		NumberSequenceKeypoint.new(0.82, 0.55),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	fogGradient.Parent = fogBand
 
 	local container = Instance.new("Frame")
 	container.Name = "Container"
@@ -195,6 +267,8 @@ function BreathHoldController:_createUI()
 
 	self.UI = {
 		Root = screenGui,
+		FogOverlay = fogOverlay,
+		FogBand = fogBand,
 		Label = label,
 		SubLabel = subLabel,
 		Duration = duration,
@@ -202,6 +276,63 @@ function BreathHoldController:_createUI()
 		ProgressLabel = progressLabel,
 		Bar = bar,
 	}
+end
+
+function BreathHoldController:_playIndicatorVfx(duration)
+	self.IndicatorToken += 1
+	local token = self.IndicatorToken
+	local fogOverlay = self.UI.FogOverlay
+	local fogBand = self.UI.FogBand
+
+	if not fogOverlay or not fogBand then
+		return
+	end
+
+	self:_setIndicatorVisible(true)
+	fogOverlay.BackgroundTransparency = 1
+	fogBand.BackgroundTransparency = 0.35
+	fogBand.Position = UDim2.fromScale(0.5, -0.55)
+
+	local overlayIn = TweenService:Create(fogOverlay, TweenInfo.new(math.min(0.2, duration * 0.2), Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 0.88,
+	})
+	local bandSweep = TweenService:Create(fogBand, TweenInfo.new(duration, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(0.5, 1.08),
+		BackgroundTransparency = 0.65,
+	})
+	local overlayOut = TweenService:Create(fogOverlay, TweenInfo.new(math.min(0.35, duration * 0.25), Enum.EasingStyle.Sine, Enum.EasingDirection.In), {
+		BackgroundTransparency = 1,
+	})
+
+	overlayIn:Play()
+	bandSweep:Play()
+
+	task.spawn(function()
+		task.wait(math.max(0, duration - 0.3))
+		if self.IndicatorToken ~= token then
+			return
+		end
+
+		overlayOut:Play()
+	end)
+
+	task.spawn(function()
+		bandSweep.Completed:Wait()
+		if self.IndicatorToken ~= token then
+			return
+		end
+
+		self:_setIndicatorVisible(false)
+	end)
+end
+
+function BreathHoldController:_setIndicatorVisible(isVisible)
+	if not self.UI then
+		return
+	end
+
+	self.UI.FogOverlay.Visible = isVisible
+	self.UI.FogBand.Visible = isVisible
 end
 
 return BreathHoldController

@@ -30,6 +30,14 @@ local JiangshiDefinition = {
 		InvestigationSpeedMultiplier = 0.9,
 	},
 
+	Navigation = {
+		PatrolRadius = 32,
+		PatrolPointMinDistance = 10,
+		PatrolPauseDuration = 1.1,
+		ScoutLingerDuration = 1.4,
+		SearchSpeedMultiplier = 1.6,
+	},
+
 	Targeting = {
 		DistanceWeight = 1,
 		LineOfSightBonus = 25,
@@ -63,16 +71,21 @@ local JiangshiDefinition = {
 					"Patrol",
 					"Scout",
 				},
+				Weight = 1.2,
+				Chance = 0.55,
+				RequireAnyCandidate = true,
 				Effects = {
 					{
 						Type = "ApplyStatus",
 						Targets = "Self",
 						StatusId = "Stunned",
-						Duration = 3,
+						Duration = 5.5,
 					},
 					{
 						Type = "StartBreathHoldChallenge",
 						Duration = 3,
+						IndicatorDuration = 2.5,
+						ReactionWindow = 1.0,
 						HastePerFailure = 0.15,
 						HasteDuration = 5,
 					},
@@ -85,7 +98,11 @@ local JiangshiDefinition = {
 				Cooldown = 30,
 				RequireState = "Chase",
 				RequireTarget = true,
-				Range = 12,
+				MaxTargetDistance = 12,
+				Weight = 1.4,
+				PreferDistanceBelow = 10,
+				PreferDistanceBelowBonus = 1.2,
+				RequireEnteredChase = false,
 				Effects = {
 					{
 						Type = "StartStruggle",
@@ -105,7 +122,10 @@ local JiangshiDefinition = {
 				Cooldown = 25,
 				RequireState = "Chase",
 				RequireTarget = true,
-				Range = 24,
+				MaxTargetDistance = 24,
+				Weight = 1.1,
+				PreferDistanceAbove = 10,
+				PreferDistanceAboveBonus = 1.1,
 				Effects = {
 					{
 						Type = "ApplyStatus",
@@ -115,10 +135,29 @@ local JiangshiDefinition = {
 					},
 				},
 			},
+
+			SpiritualFlight = {
+				Id = "SpiritualFlight",
+				CastTime = 0.2,
+				Cooldown = 60,
+				RequireState = "Patrol",
+				Weight = 0.85,
+				Chance = 0.6,
+				PreferNoTarget = 0.8,
+				RequireAnyCandidate = false,
+				Effects = {
+					{
+						Type = "StartSearchMode",
+						SearchId = "SpiritualFlight",
+						Duration = 6,
+					},
+				},
+			},
 		},
 
 		AbilityOrder = {
 			"BreathlessHunt",
+			"SpiritualFlight",
 			"BlindHunger",
 			"QiSeal",
 		},
@@ -142,6 +181,18 @@ local JiangshiDefinition = {
 						StatusId = "Power",
 						Duration = 1.0,
 						Magnitude = 0.01,
+					},
+				},
+			},
+
+			GrowingSpirit = {
+				Id = "GrowingSpirit",
+				Trigger = "OnDown",
+				Effects = {
+					{
+						Type = "ApplyPersistentModifierSelf",
+						Modifier = "Power",
+						Amount = 0.10,
 					},
 				},
 			},

@@ -11,6 +11,7 @@ StruggleService.Dependencies = {
 	"CharacterService",
 	"StatusEffectService",
 	"InteractionService",
+	"EntityService",
 }
 
 function StruggleService:Init(services)
@@ -132,6 +133,9 @@ function StruggleService:_updateStruggles()
 		if now >= struggle.NextTickAt then
 			targetCharacter:ApplyDamage(struggle.DamagePerSecond)
 			struggle.Entity:HealPercent(struggle.HealPercentPerSecond)
+			if self.EntityService then
+				self.EntityService:_handleTargetDowned(struggle.Entity, player, targetCharacter)
+			end
 			struggle.NextTickAt += 1
 			self:_syncStruggle(player, struggle, "Update")
 		end

@@ -45,14 +45,22 @@ function BreathHoldService:BeginChallenge(entity, params)
 
 	local challengeId = tostring(os.clock())
 	local duration = params.Duration or 3
+	local indicatorDuration = params.IndicatorDuration or 2.5
+	local reactionWindow = params.ReactionWindow or 1
 	local challenge = {
 		Id = challengeId,
 		Entity = entity,
 		StartedAt = os.clock(),
-		EndsAt = os.clock() + duration,
+		ActiveAt = os.clock() + indicatorDuration,
+		EndsAt = os.clock() + indicatorDuration + duration,
 		Duration = duration,
+		IndicatorDuration = indicatorDuration,
+		ReactionWindow = reactionWindow,
+		Phase = "Indicator",
 		HastePerFailure = params.HastePerFailure or 0.15,
 		BaseHasteDuration = params.HasteDuration or 5,
+		FailDrainRate = params.FailDrainRate or (reactionWindow > 0 and (1 / reactionWindow) or 1),
+		HoldDrainRate = params.HoldDrainRate or 0.05,
 		Participants = {},
 	}
 
@@ -61,15 +69,15 @@ function BreathHoldService:BeginChallenge(entity, params)
 		if roundState and roundState.IsAlive then
 			challenge.Participants[player] = {
 				IsHolding = false,
-				HeldDuration = 0,
+				BreathRemaining = 1,
 			}
 
 			self.BreathHoldStateRemote:FireClient(player, {
-				State = "Start",
-				Duration = duration,
-				Prompt = "Hold Space to stay silent",
-				SubPrompt = "Jiangshi is listening for breath",
-				RequiredKey = "SPACE",
+				State = "Indicator",
+				Duration = indicatorDuration,
+				Prompt = "Breathless Hunt",
+				SubPrompt = "Mist gathers. Be ready to hold your breath.",
+				RequiredKey = "GET READY",
 			})
 		end
 	end
@@ -82,7 +90,7 @@ end
 function BreathHoldService:HandleHoldState(player, isHolding)
 	for _, challenge in pairs(self.ActiveChallenges) do
 		local participant = challenge.Participants[player]
-		if participant then
+		if participant and challenge.Phase == "Challenge" then
 			participant.IsHolding = isHolding == true
 		end
 	end
@@ -99,19 +107,34 @@ function BreathHoldService:_updateChallenges()
 	local now = os.clock()
 
 	for challengeId, challenge in pairs(self.ActiveChallenges) do
-		for player, participant in pairs(challenge.Participants) do
-			if participant.IsHolding then
-				participant.HeldDuration += self.UpdateInterval
+		if challenge.Phase == "Indicator" and now >= challenge.ActiveAt then
+			challenge.Phase = "Challenge"
+			for player in pairs(challenge.Participants) do
+				self.BreathHoldStateRemote:FireClient(player, {
+					State = "Start",
+					Duration = challenge.Duration,
+					RequiredKey = "SPACE",
+					Prompt = "Hold Space to stay silent",
+					SubPrompt = string.format("Your breath will give you away in %.1fs if you do not react", challenge.ReactionWindow),
+					Breath = 1,
+				})
 			end
+		end
 
-			self.BreathHoldStateRemote:FireClient(player, {
-				State = "Update",
-				Duration = math.max(0, challenge.EndsAt - now),
-				RequiredKey = "SPACE",
-				Progress = math.clamp(participant.HeldDuration / challenge.Duration, 0, 1),
-				Prompt = "Hold Space to stay silent",
-				SubPrompt = "Jiangshi is listening for breath",
-			})
+		if challenge.Phase == "Challenge" then
+			for player, participant in pairs(challenge.Participants) do
+				local drainRate = participant.IsHolding and challenge.HoldDrainRate or challenge.FailDrainRate
+				participant.BreathRemaining = math.max(0, participant.BreathRemaining - (drainRate * self.UpdateInterval))
+
+				self.BreathHoldStateRemote:FireClient(player, {
+					State = "Update",
+					Duration = math.max(0, challenge.EndsAt - now),
+					RequiredKey = "SPACE",
+					Breath = participant.BreathRemaining,
+					Prompt = "Hold Space to stay silent",
+					SubPrompt = string.format("Your breath will give you away in %.1fs if you do not react", challenge.ReactionWindow),
+				})
+			end
 		end
 
 		if now >= challenge.EndsAt then
@@ -129,8 +152,7 @@ function BreathHoldService:_resolveChallenge(challengeId, challenge)
 			State = "Stop",
 		})
 
-		local heldRatio = challenge.Duration > 0 and (participant.HeldDuration / challenge.Duration) or 0
-		if heldRatio < 0.85 then
+		if participant.BreathRemaining <= 0 then
 			table.insert(failedPlayers, player)
 		end
 	end

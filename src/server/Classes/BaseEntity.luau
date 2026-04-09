@@ -11,18 +11,24 @@ local ENTITY_STATE = {
 	Rage = "Rage",
 }
 
-function BaseEntity.new(model, definition, services)
+function BaseEntity.new(model, definition, services, runtimeData)
 	local self = setmetatable({}, BaseEntity)
 	
 	self.Model = model
 	self.Definition = definition or {}
 	self.Services = services
+	self.RuntimeData = runtimeData or {}
 	self.RootPart = model.PrimaryPart or model:WaitForChild("HumanoidRootPart")
 	
 	self.Id = self.Definition.Id or model.Name
 	self.DisplayName = self.Definition.DisplayName or model.Name
 	self.StarRating = self.Definition.StarRating or self.Definition.StarRation or 1
 	self.Weight = self.Definition.Weight or self.StarRating
+	self.TemplateName = self.RuntimeData.TemplateName or self.Definition.TemplateName or self.Id
+	self.IsRuntimeEntity = self.RuntimeData.IsRuntimeEntity == true
+	self.IsSummon = self.RuntimeData.IsSummon == true
+	self.OwnerEntity = self.RuntimeData.OwnerEntity
+	self.ExpiresAt = self.RuntimeData.ExpiresAt
 	
 	self.Attributes = self.Definition.Attributes or {}
 	
@@ -31,6 +37,7 @@ function BaseEntity.new(model, definition, services)
 	local targeting = self.Definition.Targeting or {}
 	local navigation = self.Definition.Navigation or {}
 	local actions = self.Definition.Actions or {}
+	local absorption = self.Definition.Absorption or {}
 	
 	self.IsActive = false
 	self.MaxHealth = stats.Health or 100
@@ -43,7 +50,9 @@ function BaseEntity.new(model, definition, services)
 	self.TerrorRadius = perception.TerrorRadius or stats.TerrorRadius or 80
 	self.DetectionRadius = perception.DetectionRadius or stats.DetectionRadius or 60
 	self.AttentionDuration = perception.AttentionDuration or stats.AttentionLevel or 2
+	self.MemoryDuration = perception.MemoryDuration or (self.AttentionDuration + (navigation.ScoutLingerDuration or 1.25) + 2)
 	self.InvestigationSpeedMultiplier = perception.InvestigationSpeedMultiplier or 0.85
+	self.SearchDetectionRadiusMultiplier = perception.SearchDetectionRadiusMultiplier or 1
 	self.TargetRetentionBonus = targeting.CurrentTargetBonus or 18
 	self.LineOfSightBonus = targeting.LineOfSightBonus or 25
 	self.MemoryBonus = targeting.MemoryBonus or 12
@@ -62,7 +71,13 @@ function BaseEntity.new(model, definition, services)
 	self.Abilities = actions.Abilities or {}
 	self.AbilityOrder = actions.AbilityOrder or {}
 	self.Passives = actions.Passives or {}
+	self.RoundHooks = actions.RoundHooks or {}
 	self.AttackInterval = self.BasicAttack.Cooldown or self.AttackInterval
+	self.AbsorptionResistancePerAbility = absorption.ResistancePerAbility or 0
+	self.AbsorptionMaxResistance = absorption.MaxResistance or 0.75
+	self.AbsorptionFullThreshold = absorption.FullThreshold or 0
+	self.AbsorptionRelinquishDamageThreshold = absorption.RelinquishDamageThreshold or 0
+	self.AbsorptionProfiles = absorption.Profiles or {}
 	
 	self.LastAttackTime = 0
 	self.LastStateChangeTime = os.clock()
@@ -77,10 +92,16 @@ function BaseEntity.new(model, definition, services)
 	self.PatrolPauseUntil = 0
 	self.ScoutArrivalTime = nil
 	self.SearchMode = nil
+	self.ConditionStates = {}
 	self.DownedPlayers = {}
 	self.Cooldowns = {}
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
+	self.BasicAttackVariantIndex = 1
+	self.AbsorbedAbilityCount = 0
+	self.AbsorbedAbilitiesByPlayer = {}
+	self.AbsorbedProfilesByPlayer = {}
+	self.AbsorptionDamageProgress = 0
 	self.PersistentModifiers = {
 		Power = 0,
 		Haste = 0,
@@ -153,9 +174,9 @@ function BaseEntity:CanAttack()
 	return os.clock() - self.LastAttackTime >= self.AttackInterval
 end
 
-function BaseEntity:MarkAttack()
+function BaseEntity:MarkAttack(cooldown)
 	self.LastAttackTime = os.clock()
-	self:SetCooldown(self.BasicAttack.Id or "BasicAttack", self.AttackInterval)
+	self:SetCooldown(self.BasicAttack.Id or "BasicAttack", cooldown or self.AttackInterval)
 end
 
 function BaseEntity:SetCooldown(key, duration)
@@ -343,10 +364,17 @@ function BaseEntity:RememberTarget(player, position, wasVisible)
 	end
 
 	local timestamp = os.clock()
+	local previousMemory = self.TargetMemory[player]
+	local attentionExpiresAt = previousMemory and previousMemory.AttentionExpiresAt or nil
+	if wasVisible == true then
+		attentionExpiresAt = timestamp + self.AttentionDuration
+	end
+
 	self.TargetMemory[player] = {
 		LastKnownPosition = position,
 		LastSeenAt = timestamp,
 		WasVisible = wasVisible == true,
+		AttentionExpiresAt = attentionExpiresAt,
 	}
 
 	if self.TargetPlayer == player then
@@ -361,7 +389,7 @@ function BaseEntity:GetTargetMemory(player)
 		return nil
 	end
 
-	if os.clock() - memory.LastSeenAt > self.AttentionDuration then
+	if os.clock() - memory.LastSeenAt > self.MemoryDuration then
 		self.TargetMemory[player] = nil
 		return nil
 	end
@@ -376,10 +404,84 @@ end
 function BaseEntity:ClearExpiredMemory()
 	local now = os.clock()
 	for player, memory in pairs(self.TargetMemory) do
-		if now - memory.LastSeenAt > self.AttentionDuration then
+		if now - memory.LastSeenAt > self.MemoryDuration then
 			self.TargetMemory[player] = nil
 		end
 	end
+end
+
+function BaseEntity:HasAttentionOnTarget(player)
+	local memory = self:GetTargetMemory(player)
+	if not memory or not memory.AttentionExpiresAt then
+		return false
+	end
+
+	return os.clock() < memory.AttentionExpiresAt
+end
+
+function BaseEntity:SetTrackedTarget(player)
+	self.TargetPlayer = player
+
+	if not player then
+		self.TargetLastKnownPosition = nil
+		self.TargetLastSeenAt = nil
+		return
+	end
+
+	local memory = self:GetTargetMemory(player)
+	if memory then
+		self.TargetLastKnownPosition = memory.LastKnownPosition
+		self.TargetLastSeenAt = memory.LastSeenAt
+	end
+end
+
+function BaseEntity:ForgetTarget(player)
+	if not player then
+		return
+	end
+
+	self.TargetMemory[player] = nil
+
+	if self.TargetPlayer == player then
+		self.TargetPlayer = nil
+		self.TargetLastKnownPosition = nil
+		self.TargetLastSeenAt = nil
+	end
+end
+
+function BaseEntity:SetConditionActive(key, isActive)
+	if not key then
+		return
+	end
+
+	local now = os.clock()
+	local conditionState = self.ConditionStates[key]
+	if isActive then
+		if not conditionState or not conditionState.IsActive then
+			self.ConditionStates[key] = {
+				IsActive = true,
+				StartedAt = now,
+			}
+			return
+		end
+
+		conditionState.IsActive = true
+		return
+	end
+
+	if conditionState then
+		conditionState.IsActive = false
+		conditionState.StartedAt = nil
+	end
+end
+
+function BaseEntity:GetConditionDuration(key)
+	local conditionState = key and self.ConditionStates[key]
+	if not conditionState or not conditionState.IsActive or not conditionState.StartedAt then
+		return 0
+	end
+
+	return math.max(0, os.clock() - conditionState.StartedAt)
 end
 
 function BaseEntity:GetPatrolDestination()
@@ -480,6 +582,171 @@ function BaseEntity:GetMoveSpeed()
 	return self.WalkSpeed * (1 + haste) * math.max(0, 1 - hinder)
 end
 
+function BaseEntity:GetCurrentBasicAttackDefinition()
+	local basicAttack = self.BasicAttack or {}
+	local variants = basicAttack.Variants
+	if not variants or #variants == 0 then
+		return basicAttack
+	end
+
+	local index = math.clamp(self.BasicAttackVariantIndex or 1, 1, #variants)
+	local variant = variants[index]
+	local merged = table.clone(basicAttack)
+	for key, value in pairs(variant) do
+		merged[key] = value
+	end
+
+	return merged
+end
+
+function BaseEntity:AdvanceBasicAttackVariant()
+	local variants = self.BasicAttack and self.BasicAttack.Variants
+	if not variants or #variants == 0 then
+		return
+	end
+
+	self.BasicAttackVariantIndex += 1
+	if self.BasicAttackVariantIndex > #variants then
+		self.BasicAttackVariantIndex = 1
+	end
+end
+
+function BaseEntity:AbsorbAbilityFromPlayer(player, count)
+	if not player then
+		return 0
+	end
+
+	count = count or 1
+	local previousCount = self.AbsorbedAbilitiesByPlayer[player] or 0
+	self.AbsorbedAbilitiesByPlayer[player] = previousCount + count
+	self.AbsorbedAbilityCount += count
+	self:_refreshAbsorptionResistance()
+
+	local profiles = self.AbsorptionProfiles
+	if profiles and #profiles > 0 then
+		local playerProfiles = self.AbsorbedProfilesByPlayer[player] or {}
+		for absorbIndex = previousCount + 1, self.AbsorbedAbilitiesByPlayer[player] do
+			local profile = profiles[((absorbIndex - 1) % #profiles) + 1]
+			if profile then
+				table.insert(playerProfiles, profile)
+			end
+		end
+		self.AbsorbedProfilesByPlayer[player] = playerProfiles
+	end
+
+	return self.AbsorbedAbilitiesByPlayer[player]
+end
+
+function BaseEntity:_refreshAbsorptionResistance()
+	self.PersistentModifiers.Resistance = math.min(self.AbsorptionMaxResistance, self.AbsorbedAbilityCount * self.AbsorptionResistancePerAbility)
+end
+
+function BaseEntity:GetAbsorbedAbilityCount()
+	return self.AbsorbedAbilityCount or 0
+end
+
+function BaseEntity:GetAbsorbedAbilityCountForPlayer(player)
+	return player and (self.AbsorbedAbilitiesByPlayer[player] or 0) or 0
+end
+
+function BaseEntity:IsPlayerFullyAbsorbed(player)
+	if not player or self.AbsorptionFullThreshold <= 0 then
+		return false
+	end
+
+	return self:GetAbsorbedAbilityCountForPlayer(player) >= self.AbsorptionFullThreshold
+end
+
+function BaseEntity:GetInheritedBasicAttackEffects()
+	local effects = {}
+
+	for _, profiles in pairs(self.AbsorbedProfilesByPlayer) do
+		for _, profile in ipairs(profiles) do
+			for _, step in ipairs(profile.Effects or {}) do
+				table.insert(effects, step)
+			end
+		end
+	end
+
+	return effects
+end
+
+function BaseEntity:RelinquishRandomAbsorbedAbility()
+	if self.AbsorbedAbilityCount <= 0 then
+		return nil
+	end
+
+	local candidates = {}
+	for player, count in pairs(self.AbsorbedAbilitiesByPlayer) do
+		if count and count > 0 then
+			table.insert(candidates, player)
+		end
+	end
+
+	if #candidates <= 0 then
+		return nil
+	end
+
+	local targetPlayer = candidates[self.Random:NextInteger(1, #candidates)]
+	self.AbsorbedAbilitiesByPlayer[targetPlayer] -= 1
+	self.AbsorbedAbilityCount = math.max(0, self.AbsorbedAbilityCount - 1)
+
+	local playerProfiles = self.AbsorbedProfilesByPlayer[targetPlayer]
+	local removedProfile = nil
+	if playerProfiles and #playerProfiles > 0 then
+		removedProfile = table.remove(playerProfiles)
+		if #playerProfiles <= 0 then
+			self.AbsorbedProfilesByPlayer[targetPlayer] = nil
+		end
+	end
+
+	if self.AbsorbedAbilitiesByPlayer[targetPlayer] <= 0 then
+		self.AbsorbedAbilitiesByPlayer[targetPlayer] = nil
+	end
+
+	self:_refreshAbsorptionResistance()
+
+	return {
+		Player = targetPlayer,
+		Profile = removedProfile,
+		RemainingOnTarget = self.AbsorbedAbilitiesByPlayer[targetPlayer] or 0,
+		TotalRemaining = self.AbsorbedAbilityCount,
+	}
+end
+
+function BaseEntity:RegisterIncomingDamage(amount)
+	if not amount or amount <= 0 then
+		return {}
+	end
+
+	if self.AbsorptionRelinquishDamageThreshold <= 0 then
+		return {}
+	end
+
+	self.AbsorptionDamageProgress += amount
+	local released = {}
+	while self.AbsorptionDamageProgress >= self.AbsorptionRelinquishDamageThreshold and self.AbsorbedAbilityCount > 0 do
+		self.AbsorptionDamageProgress -= self.AbsorptionRelinquishDamageThreshold
+		local relinquished = self:RelinquishRandomAbsorbedAbility()
+		if not relinquished then
+			self.AbsorptionDamageProgress = 0
+			break
+		end
+
+		table.insert(released, relinquished)
+	end
+
+	return released
+end
+
+function BaseEntity:GetDetectionRange()
+	if self.SearchMode then
+		return self.DetectionRadius * self.SearchDetectionRadiusMultiplier
+	end
+
+	return self.DetectionRadius
+end
+
 function BaseEntity:GetStopDistance()
 	return self.StopDistance
 end
@@ -532,10 +799,17 @@ function BaseEntity:ResetRuntimeState()
 	self.PatrolPauseUntil = 0
 	self.ScoutArrivalTime = nil
 	self.SearchMode = nil
+	self.ConditionStates = {}
 	self.DownedPlayers = {}
+	self.RegisteredRoundHookIds = {}
 	self.Cooldowns = {}
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
+	self.BasicAttackVariantIndex = 1
+	self.AbsorbedAbilityCount = 0
+	self.AbsorbedAbilitiesByPlayer = {}
+	self.AbsorbedProfilesByPlayer = {}
+	self.AbsorptionDamageProgress = 0
 	self.LastAttackTime = 0
 end
 
@@ -559,10 +833,23 @@ function BaseEntity:Destroy()
 	self.TargetPlayer = nil
 end
 
+function BaseEntity:SetLifetime(duration)
+	if duration == nil then
+		self.ExpiresAt = nil
+		return
+	end
+
+	self.ExpiresAt = os.clock() + duration
+end
+
+function BaseEntity:HasExpired()
+	return self.ExpiresAt ~= nil and os.clock() >= self.ExpiresAt
+end
+
 function BaseEntity:BeginSearchMode(searchId, duration)
 	self.SearchMode = {
 		Id = searchId,
-		EndsAt = os.clock() + duration,
+		EndsAt = duration and (os.clock() + duration) or nil,
 	}
 end
 
@@ -573,6 +860,10 @@ function BaseEntity:IsSearchModeActive(searchId)
 
 	if searchId ~= nil and self.SearchMode.Id ~= searchId then
 		return false
+	end
+
+	if self.SearchMode.EndsAt == nil then
+		return true
 	end
 
 	return os.clock() < self.SearchMode.EndsAt

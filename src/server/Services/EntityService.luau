@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BaseEntity = require(ServerScriptService.Server.Classes.BaseEntity)
@@ -12,6 +13,7 @@ local EntityService = {}
 EntityService.Name = "EntityService"
 EntityService.Dependencies = {
 	"RoundManager",
+	"RoundHookService",
 	"CharacterService",
 	"StatusEffectService",
 	"InteractionService",
@@ -32,9 +34,14 @@ local ENTITY_STATE = {
 function EntityService:Init(services)
 	self.Services = services
 	self.Entities = {}
+	self.EntityTemplates = {}
 	self.UpdateInterval = 0.2
+	self.NextRoundHookRuntimeId = 0
 
 	self.EntitiesFolder = Workspace:WaitForChild("Entities")
+	self.TemplateStorage = Instance.new("Folder")
+	self.TemplateStorage.Name = "EntityTemplates"
+	self.TemplateStorage.Parent = ServerStorage
 	self.RaycastParams = RaycastParams.new()
 	self.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 end
@@ -52,25 +59,59 @@ end
 function EntityService:_registerExistingEntities()
 	for _,model in ipairs(self.EntitiesFolder:GetChildren()) do
 		if model:IsA("Model") and model.PrimaryPart then
-			local definition = EntityDefinitions[model.Name]
-			local entity = BaseEntity.new(model, definition, self.Services)
-
-			table.insert(self.Entities, entity)
-
-			DebugLog:Log("Entity", string.format(
-				"[EntityService] Registered entity: %s | Stars: %d | Weight: %d",
-				entity.DisplayName,
-				entity.StarRating,
-				entity.Weight
-			))
+			self:_registerEntityModel(model)
 		end
 	end
 end
 
+function EntityService:_cacheEntityTemplate(model, definition)
+	local templateName = (definition and definition.TemplateName) or (definition and definition.Id) or model.Name
+	if self.EntityTemplates[templateName] then
+		return
+	end
+
+	local template = model:Clone()
+	template.Name = templateName
+	template.Parent = self.TemplateStorage
+
+	local aliases = {
+		templateName,
+		model.Name,
+		definition and definition.Id or nil,
+		definition and definition.TemplateName or nil,
+	}
+
+	for _, alias in ipairs(aliases) do
+		if alias and not self.EntityTemplates[alias] then
+			self.EntityTemplates[alias] = template
+		end
+	end
+end
+
+function EntityService:_registerEntityModel(model, runtimeData)
+	local definition = EntityDefinitions[model.Name] or EntityDefinitions[(runtimeData and runtimeData.EntityId) or model.Name]
+	local entity = BaseEntity.new(model, definition, self.Services, runtimeData)
+
+	self:_cacheEntityTemplate(model, definition)
+	table.insert(self.Entities, entity)
+
+	DebugLog:Log("Entity", string.format(
+		"[EntityService] Registered entity: %s | Stars: %d | Weight: %d",
+		entity.DisplayName,
+		entity.StarRating,
+		entity.Weight
+	))
+
+	return entity
+end
+
 function EntityService:_runEntityLoop()
 	while true do
-		for _, entity in ipairs(self.Entities) do
-			if entity.IsActive then
+		for index = #self.Entities, 1, -1 do
+			local entity = self.Entities[index]
+			if entity:HasExpired() then
+				self:_despawnEntity(entity, "Expired")
+			elseif entity.IsActive then
 				self:_updateEntity(entity, self.UpdateInterval)
 			end
 		end
@@ -116,23 +157,27 @@ function EntityService:_collectTargetCandidates(entity)
 			if character and character.RootPart then
 				local livePosition = character.RootPart.Position
 				local distance = (livePosition - entityPosition).Magnitude
-				local isVisible = distance <= entity.DetectionRadius and self:_hasLineOfSight(entity, character)
+				local isFullyAbsorbed = entity.IsPlayerFullyAbsorbed and entity:IsPlayerFullyAbsorbed(player)
+				local isVisible = distance <= entity:GetDetectionRange() and self:_hasLineOfSight(entity, character)
+				local isDetected = isVisible or isFullyAbsorbed
 				local memory = entity:GetTargetMemory(player)
 				local candidatePosition = livePosition
 				local candidateDistance = distance
 
-				if not isVisible and memory then
+				if not isDetected and memory then
 					candidatePosition = memory.LastKnownPosition
 					candidateDistance = (candidatePosition - entityPosition).Magnitude
 				end
 
-				if isVisible or memory then
+				if isDetected or memory then
 					table.insert(candidates, {
 						Player = player,
 						Character = character,
 						Position = candidatePosition,
 						Distance = candidateDistance,
 						IsVisible = isVisible,
+						IsDetected = isDetected,
+						IsFullyAbsorbed = isFullyAbsorbed,
 						Memory = memory,
 					})
 				end
@@ -162,7 +207,7 @@ end
 
 function EntityService:_scoreTargetCandidate(entity, candidate)
 	local score = 0
-	local effectiveRange = math.max(entity.DetectionRadius * 1.25, entity.AttackRange)
+	local effectiveRange = math.max(entity:GetDetectionRange() * 1.25, entity.AttackRange)
 
 	score += math.max(0, effectiveRange - candidate.Distance) * entity.DistanceWeight
 
@@ -172,6 +217,14 @@ function EntityService:_scoreTargetCandidate(entity, candidate)
 
 	if candidate.Memory then
 		score += entity.MemoryBonus
+	end
+
+	if candidate.IsDetected and not candidate.IsVisible then
+		score += 22
+	end
+
+	if candidate.IsFullyAbsorbed then
+		score += 36
 	end
 
 	if entity:GetTarget() == candidate.Player then
@@ -187,10 +240,11 @@ function EntityService:_updateTargetSelection(entity, bestCandidate)
 		return
 	end
 
-	entity:SetTarget(bestCandidate.Player, bestCandidate.Position, bestCandidate.IsVisible)
 	if bestCandidate.IsVisible then
+		entity:SetTarget(bestCandidate.Player, bestCandidate.Position, true)
 		entity:EndSearchMode()
-		entity:RememberTarget(bestCandidate.Player, bestCandidate.Position, true)
+	else
+		entity:SetTrackedTarget(bestCandidate.Player)
 	end
 end
 
@@ -217,7 +271,7 @@ function EntityService:_updateEntityState(entity)
 		return
 	end
 
-	if memory.WasVisible then
+	if entity:HasAttentionOnTarget(targetPlayer) then
 		entity:EnterState(ENTITY_STATE.Chase)
 	else
 		entity:EnterState(ENTITY_STATE.Scout)
@@ -426,6 +480,28 @@ function EntityService:_canUseAbility(entity, ability, candidates)
 		return false
 	end
 
+	if ability.RequirePlayersInRadius and self:_countPlayersInRadius(entity, ability.RequirePlayersInRadius) <= 0 then
+		return false
+	end
+
+	if ability.RequirePlayersInRadiusForDuration then
+		local radius = ability.RequirePlayersInRadius or ability.PlayerPresenceRadius
+		if not radius then
+			return false
+		end
+
+		local hasNearbyPlayers = self:_countPlayersInRadius(entity, radius) > 0
+		local conditionKey = string.format("PlayersInRadius:%s:%s", tostring(ability.Id or "Ability"), tostring(radius))
+		entity:SetConditionActive(conditionKey, hasNearbyPlayers)
+		if not hasNearbyPlayers then
+			return false
+		end
+
+		if entity:GetConditionDuration(conditionKey) < ability.RequirePlayersInRadiusForDuration then
+			return false
+		end
+	end
+
 	return true
 end
 
@@ -574,11 +650,15 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 	if entity:HasReachedPatrolDestination() then
 		if entity.SearchMode then
 			entity:PickPatrolDestination()
+			destination = entity:GetPatrolDestination()
+			if not destination then
+				return
+			end
 		else
 			entity:MarkPatrolPause()
 			entity:PickPatrolDestination()
+			return
 		end
-		return
 	end
 
 	entity:MoveToward(destination, deltaTime)
@@ -596,8 +676,13 @@ function EntityService:_updateScoutMovement(entity, deltaTime)
 	if entity:HasReachedScoutDestination() then
 		entity:MarkScoutArrival()
 		if entity:HasFinishedScoutLinger() then
+			local targetPlayer = entity:GetTarget()
 			entity:ClearScoutArrival()
-			entity:SetTarget(nil)
+			if targetPlayer then
+				entity:ForgetTarget(targetPlayer)
+			else
+				entity:SetTarget(nil)
+			end
 			entity:EnterState(ENTITY_STATE.Patrol)
 			entity:PickPatrolDestination()
 		end
@@ -614,6 +699,8 @@ function EntityService:_tryBasicAttack(entity)
 		return
 	end
 
+	local attackDefinition = entity:GetCurrentBasicAttackDefinition()
+
 	local statusService = self.StatusEffectService
 	if statusService and not statusService:CanUseAbilities(entity) then
 		return
@@ -629,11 +716,12 @@ function EntityService:_tryBasicAttack(entity)
 		return
 	end
 
-	if not entity:IsInRange(targetCharacter.RootPart.Position, entity.AttackRange) then
+	local attackRange = attackDefinition.AttackRange or entity.AttackRange
+	if not entity:IsInRange(targetCharacter.RootPart.Position, attackRange) then
 		return
 	end
 
-	local damageAmount = entity:GetScaledDamage(entity.Damage)
+	local damageAmount = entity:GetScaledDamage(attackDefinition.Damage or entity.Damage)
 	local didDamage = targetCharacter:ApplyDamage(damageAmount)
 	if didDamage then
 		if statusService then
@@ -649,11 +737,12 @@ function EntityService:_tryBasicAttack(entity)
 			interactionService:InterruptInteraction(targetPlayer, "Damaged")
 		end
 
-		self:_executeBasicAttackEffects(entity, targetPlayer)
+		self:_executeBasicAttackEffects(entity, targetPlayer, attackDefinition)
 		self:_handleTargetDowned(entity, targetPlayer, targetCharacter)
 	end
 
-	entity:MarkAttack()
+	entity:MarkAttack(attackDefinition.Cooldown or entity.AttackInterval)
+	entity:AdvanceBasicAttackVariant()
 
 	DebugLog:Log("Entity", string.format(
 		"[EntityService] %s hit %s for %d",
@@ -663,14 +752,29 @@ function EntityService:_tryBasicAttack(entity)
 	))
 end
 
-function EntityService:_executeBasicAttackEffects(entity, targetPlayer)
-	local basicAttack = entity.BasicAttack
-	if not basicAttack or not basicAttack.Effects then
+function EntityService:_executeBasicAttackEffects(entity, targetPlayer, attackDefinition)
+	local basicAttack = attackDefinition or entity:GetCurrentBasicAttackDefinition()
+	if not basicAttack then
 		return
 	end
 
 	local context = self:_createEffectContext(entity, targetPlayer, nil, nil)
-	for _, step in ipairs(basicAttack.Effects) do
+	local effectSteps = {}
+	for _, step in ipairs(basicAttack.Effects or {}) do
+		table.insert(effectSteps, step)
+	end
+
+	if entity.GetInheritedBasicAttackEffects then
+		for _, step in ipairs(entity:GetInheritedBasicAttackEffects()) do
+			table.insert(effectSteps, step)
+		end
+	end
+
+	if #effectSteps <= 0 then
+		return
+	end
+
+	for _, step in ipairs(effectSteps) do
 		self:_executeEffectStep(entity, step, context)
 	end
 end
@@ -746,6 +850,8 @@ function EntityService:_executeEffectStep(entity, step, context)
 		for _, player in ipairs(self:_resolveEffectTargets(entity, step, context)) do
 			self:_damageTargetFromEffect(entity, player, step)
 		end
+	elseif stepType == "RepeatDamageTargets" then
+		self:_repeatDamageTargetsFromEffect(entity, step, context)
 	elseif stepType == "HealSelfPercent" then
 		entity:HealPercent(step.Amount or 0)
 	elseif stepType == "ApplyPersistentModifierSelf" then
@@ -834,10 +940,312 @@ function EntityService:_executeEffectStep(entity, step, context)
 		self.BreathHoldService:BeginChallenge(entity, step)
 	elseif stepType == "StartSearchMode" then
 		local searchId = step.SearchId or "SearchMode"
-		local duration = step.Duration or 0
+		local duration = step.Duration
 		entity:BeginSearchMode(searchId, duration)
 		entity:PickPatrolDestination()
+	elseif stepType == "SpawnEntity" then
+		self:_spawnEntitiesFromEffect(entity, step, context)
+	elseif stepType == "AbsorbAbility" then
+		for _, player in ipairs(self:_resolveEffectTargets(entity, step, context)) do
+			local totalAbsorbed = entity:AbsorbAbilityFromPlayer(player, step.Count or 1)
+			DebugLog:Log("Entity", string.format("[EntityService] %s absorbed from %s (%d total on target)", entity.DisplayName, player.Name, totalAbsorbed))
+		end
+	elseif stepType == "ExtendReceptionTime" then
+		local roundHookService = self.RoundHookService
+		if not roundHookService then
+			return
+		end
+
+		roundHookService:ExtendReceptionTime(step.Amount or 0, step.Reason or entity.DisplayName)
+	elseif stepType == "SetReceptionTime" then
+		local roundHookService = self.RoundHookService
+		if not roundHookService then
+			return
+		end
+
+		roundHookService:SetReceptionTime(step.TimeLeft or 0, step.Reason or entity.DisplayName)
+	elseif stepType == "LogMessage" then
+		local message = step.Message or "[EntityService] Round hook triggered"
+		local hookContext = context and context.RoundHookContext
+		if hookContext and hookContext.Phase then
+			message = string.gsub(message, "{Phase}", tostring(hookContext.Phase))
+		end
+		if hookContext and hookContext.TimeLeft ~= nil then
+			message = string.gsub(message, "{TimeLeft}", tostring(hookContext.TimeLeft))
+		end
+		if hookContext and hookContext.Objective and hookContext.Objective.Name then
+			message = string.gsub(message, "{ObjectiveName}", tostring(hookContext.Objective.Name))
+		end
+
+		DebugLog:Log("Entity", string.format("[EntityService] %s %s", entity.DisplayName, message))
 	end
+end
+
+function EntityService:_repeatDamageTargetsFromEffect(entity, step, context)
+	local targets = self:_resolveEffectTargets(entity, step, context)
+	local hits = math.max(1, step.Hits or 1)
+	local interval = math.max(0, step.Interval or 0)
+
+	for _, player in ipairs(targets) do
+		if interval <= 0 then
+			for _ = 1, hits do
+				self:_damageTargetFromEffect(entity, player, step)
+			end
+		else
+			task.spawn(function()
+				for hitIndex = 1, hits do
+					if not entity or not entity.IsActive or entity.Health <= 0 then
+						return
+					end
+
+					self:_damageTargetFromEffect(entity, player, step)
+
+					if hitIndex < hits then
+						task.wait(interval)
+					end
+				end
+			end)
+		end
+	end
+end
+
+function EntityService:_spawnEntitiesFromEffect(entity, step, context)
+	local entityId = step.EntityId
+	if not entityId then
+		return
+	end
+
+	local count = math.max(1, step.Count or 1)
+	local spawnCFrames = self:_buildSpawnCFrames(entity, step, context, count)
+	for _, spawnCFrame in ipairs(spawnCFrames) do
+		self:SpawnEntity(entityId, {
+			CFrame = spawnCFrame,
+			OwnerEntity = entity,
+			Lifetime = step.Lifetime,
+			IsSummon = step.IsSummon ~= false,
+			Activate = step.Activate ~= false,
+		})
+	end
+end
+
+function EntityService:_buildSpawnCFrames(entity, step, context, count)
+	local spawnCFrames = {}
+	local origin = self:_resolveSpawnOrigin(entity, step, context)
+	if not origin then
+		return spawnCFrames
+	end
+
+	local radius = step.Radius or 0
+	local heightOffset = step.HeightOffset or 0
+	local random = entity.Random
+	for index = 1, count do
+		local offset = Vector3.zero
+		if radius > 0 then
+			local angle = random:NextNumber(0, math.pi * 2)
+			local distance = count == 1 and radius or random:NextNumber(math.max(0, radius * 0.35), radius)
+			offset = Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
+		end
+
+		local position = origin.Position + offset + Vector3.new(0, heightOffset, 0)
+		local lookAt = position + origin.LookVector
+		if step.FaceOrigin == true then
+			lookAt = origin.Position
+		end
+
+		spawnCFrames[index] = CFrame.new(position, lookAt)
+	end
+
+	return spawnCFrames
+end
+
+function EntityService:_resolveSpawnOrigin(entity, step, context)
+	local mode = step.SpawnAt or "Self"
+	if mode == "Self" then
+		return entity.RootPart and entity.RootPart.CFrame or nil
+	end
+
+	if mode == "Target" or mode == "CurrentTarget" then
+		local targetPlayer = context and context.TargetPlayer
+		local targetCharacter = targetPlayer and self.CharacterService:GetCharacterByPlayer(targetPlayer)
+		return targetCharacter and targetCharacter.RootPart and targetCharacter.RootPart.CFrame or nil
+	end
+
+	if mode == "Position" and step.Position then
+		return CFrame.new(step.Position)
+	end
+
+	return entity.RootPart and entity.RootPart.CFrame or nil
+end
+
+function EntityService:SpawnEntity(entityId, params)
+	params = params or {}
+
+	local definition = EntityDefinitions[entityId]
+	if not definition then
+		warn(string.format("[EntityService] Missing entity definition for summon '%s'", tostring(entityId)))
+		return nil
+	end
+
+	local templateName = definition.TemplateName or definition.Id or entityId
+	local sourceDefinition = EntityDefinitions[templateName]
+	if sourceDefinition then
+		templateName = sourceDefinition.TemplateName or sourceDefinition.Id or templateName
+	end
+
+	local template = self.EntityTemplates[templateName]
+	if not template then
+		local liveModel = self.EntitiesFolder:FindFirstChild(templateName)
+			or self.EntitiesFolder:FindFirstChild(entityId)
+			or (sourceDefinition and sourceDefinition.Id and self.EntitiesFolder:FindFirstChild(sourceDefinition.Id))
+		if liveModel and liveModel:IsA("Model") then
+			self:_cacheEntityTemplate(liveModel, sourceDefinition or definition)
+			template = self.EntityTemplates[templateName]
+		end
+	end
+
+	if not template then
+		for _, existingEntity in ipairs(self.Entities) do
+			local matchesTemplate = existingEntity.TemplateName == templateName
+				or existingEntity.Id == templateName
+				or (existingEntity.Definition and existingEntity.Definition.Id == templateName)
+				or (sourceDefinition and existingEntity.Definition == sourceDefinition)
+				or (existingEntity.Model and existingEntity.Model.Name == templateName)
+
+			if matchesTemplate and existingEntity.Model then
+				self:_cacheEntityTemplate(existingEntity.Model, sourceDefinition or existingEntity.Definition)
+				template = self.EntityTemplates[templateName]
+				if template then
+					break
+				end
+			end
+		end
+	end
+
+	if not template then
+		warn(string.format("[EntityService] Missing entity template for summon '%s'", tostring(entityId)))
+		return nil
+	end
+
+	local model = template:Clone()
+	if not model then
+		warn(string.format("[EntityService] Failed to clone entity template '%s' for summon '%s'", tostring(templateName), tostring(entityId)))
+		return nil
+	end
+
+	model.Name = entityId
+	self:_applyRuntimeEntityAppearance(model, definition, params)
+	model.Parent = self.EntitiesFolder
+
+	local targetCFrame = params.CFrame
+	if targetCFrame then
+		model:PivotTo(targetCFrame)
+	end
+
+	local runtimeData = {
+		EntityId = entityId,
+		TemplateName = templateName,
+		IsRuntimeEntity = true,
+		IsSummon = params.IsSummon ~= false,
+		OwnerEntity = params.OwnerEntity,
+		ExpiresAt = params.Lifetime and (os.clock() + params.Lifetime) or nil,
+	}
+
+	local entity = self:_registerEntityModel(model, runtimeData)
+	if params.Activate ~= false then
+		entity:SetActive(true)
+	end
+
+	self:_registerRoundHooksForEntity(entity)
+
+	DebugLog:Log("Entity", string.format("[EntityService] Spawned runtime entity: %s using template %s", entity.DisplayName, tostring(templateName)))
+
+	return entity
+end
+
+function EntityService:_applyRuntimeEntityAppearance(model, definition, params)
+	local appearance = (params and params.RuntimeAppearance) or (definition and definition.RuntimeAppearance)
+	if not appearance then
+		return
+	end
+
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("BasePart") then
+			if appearance.Color then
+				descendant.Color = appearance.Color
+			end
+
+			if appearance.Material then
+				descendant.Material = appearance.Material
+			end
+
+			if appearance.Transparency ~= nil then
+				descendant.Transparency = appearance.Transparency
+			end
+		elseif descendant:IsA("ParticleEmitter") and appearance.DisableParticles == true then
+			descendant.Enabled = false
+		end
+	end
+end
+
+function EntityService:_despawnEntity(entity, reason)
+	self:_clearRoundHooksForEntity(entity)
+
+	local statusEffectService = self.StatusEffectService
+	if statusEffectService then
+		statusEffectService:ClearStatuses(entity)
+	end
+
+	for index = #self.Entities, 1, -1 do
+		if self.Entities[index] == entity then
+			table.remove(self.Entities, index)
+			break
+		end
+	end
+
+	if entity.Model then
+		entity.Model:Destroy()
+	end
+
+	DebugLog:Log("Entity", string.format("[EntityService] Despawned %s (%s)", entity.DisplayName, tostring(reason or "Unknown")))
+	entity:Destroy()
+end
+
+function EntityService:DamageEntity(entity, amount, options)
+	options = options or {}
+	if not entity or not amount or amount <= 0 or entity.Health <= 0 then
+		return false
+	end
+
+	local finalAmount = amount
+	local statusService = self.StatusEffectService
+	if statusService and not options.IsStatusEffect then
+		finalAmount *= (1 + statusService:GetModifier(entity, "Fragility"))
+		finalAmount *= math.max(0, 1 - statusService:GetModifier(entity, "Resistance"))
+	end
+
+	finalAmount *= math.max(0, 1 - (entity:GetModifierValue("Resistance") or 0))
+	finalAmount = math.max(0, finalAmount)
+	if finalAmount <= 0 then
+		return false
+	end
+
+	entity.Health = math.clamp(entity.Health - finalAmount, 0, entity.MaxHealth)
+	local relinquished = entity:RegisterIncomingDamage(finalAmount)
+	for _, release in ipairs(relinquished) do
+		DebugLog:Log("Entity", string.format(
+			"[EntityService] %s relinquished an absorbed ability back to %s (%d remaining on target)",
+			entity.DisplayName,
+			release.Player and release.Player.Name or "Unknown",
+			release.RemainingOnTarget or 0
+		))
+	end
+
+	if entity.Health <= 0 then
+		entity.IsActive = false
+		DebugLog:Log("Entity", string.format("[EntityService] %s reached 0 health", entity.DisplayName))
+	end
+
+	return true
 end
 
 function EntityService:ForceChaseTarget(entity, player, position)
@@ -931,7 +1339,7 @@ function EntityService:_collectVisiblePlayers(entity)
 			local character = characterService:GetCharacterByPlayer(player)
 			if character and character.RootPart then
 				local distance = (character.RootPart.Position - entityPosition).Magnitude
-				if distance <= entity.DetectionRadius and self:_hasLineOfSight(entity, character) then
+				if distance <= entity:GetDetectionRange() and self:_hasLineOfSight(entity, character) then
 					table.insert(visiblePlayers, player)
 				end
 			end
@@ -993,33 +1401,11 @@ function EntityService:_collectPlayersInRadius(entity, radius)
 end
 
 function EntityService:_countVisibleTargets(entity)
-	local count = 0
-	local roundManager = self.RoundManager
-	local characterService = self.CharacterService
-	local entityPosition = entity:GetPosition()
-	if not roundManager or not characterService then
-		return 0
-	end
+	return #self:_collectVisiblePlayers(entity)
+end
 
-	if not entityPosition then
-		return 0
-	end
-
-	for _, player in ipairs(roundManager:GetActivePlayers()) do
-		local roundState = roundManager:GetRoundState(player)
-		if roundState and roundState.IsAlive then
-			local character = characterService:GetCharacterByPlayer(player)
-			if character and character.RootPart then
-				local position = character.RootPart.Position
-				local distance = (position - entityPosition).Magnitude
-				if distance <= entity.DetectionRadius and self:_hasLineOfSight(entity, character) then
-					count += 1
-				end
-			end
-		end
-	end
-
-	return count
+function EntityService:_countPlayersInRadius(entity, radius)
+	return #self:_collectPlayersInRadius(entity, radius)
 end
 
 function EntityService:_hasLineOfSight(entity, character)
@@ -1043,8 +1429,21 @@ function EntityService:_hasLineOfSight(entity, character)
 end
 
 function EntityService:SetAllEntitiesActive(state)
-	for _, entity in ipairs(self.Entities) do
+	for index = #self.Entities, 1, -1 do
+		local entity = self.Entities[index]
+		if entity.IsRuntimeEntity and not state then
+			self:_despawnEntity(entity, "ReceptionReset")
+			continue
+		end
+
+		if not state then
+			self:_clearRoundHooksForEntity(entity)
+		end
+
 		entity:SetActive(state)
+		if state then
+			self:_registerRoundHooksForEntity(entity)
+		end
 		
 		if not state then
 			local statusEffectService = self.StatusEffectService
@@ -1056,6 +1455,48 @@ function EntityService:SetAllEntitiesActive(state)
 	end
 
 	DebugLog:Log("Entity", "[EntityService] Entities active:", state)
+end
+
+function EntityService:_registerRoundHooksForEntity(entity)
+	local roundHookService = self.RoundHookService
+	if not roundHookService or not entity.IsActive then
+		return
+	end
+
+	self:_clearRoundHooksForEntity(entity)
+
+	for hookId, hookDefinition in pairs(entity.RoundHooks or {}) do
+		self.NextRoundHookRuntimeId += 1
+		local runtimeHookId = string.format("%s:%s:%d", entity.DisplayName, tostring(hookId), self.NextRoundHookRuntimeId)
+		local definitionCopy = table.clone(hookDefinition)
+		definitionCopy.Id = runtimeHookId
+		definitionCopy.Callback = function(context)
+			if not entity.IsActive then
+				return
+			end
+
+			local targetPlayer = entity:GetTarget()
+			local effectContext = self:_createEffectContext(entity, targetPlayer, nil, nil)
+			effectContext.RoundHookContext = context
+			self:_executeEffectSteps(entity, hookDefinition, effectContext)
+		end
+
+		roundHookService:RegisterHook(definitionCopy)
+		table.insert(entity.RegisteredRoundHookIds, runtimeHookId)
+	end
+end
+
+function EntityService:_clearRoundHooksForEntity(entity)
+	local roundHookService = self.RoundHookService
+	if not roundHookService then
+		return
+	end
+
+	for _, hookId in ipairs(entity.RegisteredRoundHookIds or {}) do
+		roundHookService:RemoveHook(hookId)
+	end
+
+	entity.RegisteredRoundHookIds = {}
 end
 
 return EntityService

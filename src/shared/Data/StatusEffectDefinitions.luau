@@ -162,6 +162,24 @@ local StatusEffectDefinitions = {
 		},
 	},
 
+	[StatusEffectId.OpenWounds] = {
+		Id = StatusEffectId.OpenWounds,
+		DisplayName = "Open Wounds",
+		ShortLabel = "OWD",
+		IsBuff = false,
+		AllowedTargets = { "Remnant" },
+		DefaultDuration = 12,
+	},
+
+	[StatusEffectId.DeepWounds] = {
+		Id = StatusEffectId.DeepWounds,
+		DisplayName = "Deep Wounds",
+		ShortLabel = "DWD",
+		IsBuff = false,
+		AllowedTargets = { "Remnant" },
+		DefaultDuration = 12,
+	},
+
 	[StatusEffectId.NilValue] = {
 		Id = StatusEffectId.NilValue,
 		DisplayName = "nil.value",

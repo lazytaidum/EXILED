@@ -90,6 +90,10 @@ function RoundManager:SetPhase(phase, duration)
 	end
 
 	self:BroadcastTimer()
+
+	if self.Services.RoundHookService then
+		self.Services.RoundHookService:RaisePhaseChanged(self.CurrentPhase, self.TimeLeft)
+	end
 end
 
 function RoundManager:BroadcastTimer()
@@ -117,6 +121,9 @@ function RoundManager:RunPhase(phase, duration)
 		task.wait(1)
 		self.TimeLeft -= 1
 		self:BroadcastTimer()
+		if self.Services.RoundHookService then
+			self.Services.RoundHookService:RaiseTimerTick(phase, self.TimeLeft)
+		end
 	end
 
 	if phase == GamePhase.Reception and not self.SkipPhase then
@@ -162,6 +169,9 @@ function RoundManager:ClearRound()
 	table.clear(self.ActivePlayers)
 	table.clear(self.RoundStates)
 	self.CurrentOutcome = RoundOutcome.None
+	if self.Services.RoundHookService then
+		self.Services.RoundHookService:ResetHooks()
+	end
 end
 
 function RoundManager:GetRoundState(player)
@@ -356,6 +366,12 @@ function RoundManager:OnReceptionTimerExpired()
 		self:EndReception(RoundOutcome.RemnantsWin)
 	else
 		self:EndReception(RoundOutcome.EntitiesWin)
+	end
+end
+
+function RoundManager:OnObjectiveCompleted(objective)
+	if self.Services.RoundHookService then
+		self.Services.RoundHookService:RaiseObjectiveCompleted(objective)
 	end
 end
 

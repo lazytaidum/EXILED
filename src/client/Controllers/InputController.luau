@@ -10,7 +10,7 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 local InputController = {}
 InputController.Name = "InputController"
 InputController.Dependencies = {
-	"StruggleController",
+	"QTEController",
 	"BreathHoldController",
 }
 
@@ -19,7 +19,6 @@ function InputController:Init()
 	self.RemotesFolder = self.Shared:WaitForChild("Remotes")
 	self.RequestInteractRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestInteract)
 	self.RequestMovementStateRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestMovementState)
-	self.RequestStruggleInputRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestStruggleInput)
 	self.RequestBreathHoldStateRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestBreathHoldState)
 	self.Keybinds = DefaultKeybinds.Keyboard or {}
 end
@@ -70,7 +69,7 @@ function InputController:_shouldIgnoreInput(input, gameProcessedEvent)
 		end
 
 		if actionToken == ActionToken.PrimaryContextAction then
-			local hasPrompt = (self.StruggleController and self.StruggleController:IsActive())
+			local hasPrompt = (self.QTEController and self.QTEController:IsActive())
 				or (self.BreathHoldController and self.BreathHoldController:RequiresHoldInput())
 			if hasPrompt then
 				return false
@@ -93,12 +92,8 @@ function InputController:_handleKeyboardInput(keyCode, isPressed)
 
 	for _, actionToken in ipairs(actionTokens) do
 		if actionToken == ActionToken.PrimaryContextAction then
-			if self.StruggleController and self.StruggleController:IsActive() then
-				if isPressed then
-					DebugLog:Log("ClientInteraction", "[InputController] Struggle input pressed")
-					self.StruggleController:RegisterLocalPress()
-					self:RequestStruggleInput()
-				end
+			if self.QTEController and self.QTEController:IsActive() then
+				self.QTEController:HandleKeyboardInput(keyCode, isPressed)
 				return
 			end
 
@@ -140,10 +135,6 @@ end
 function InputController:RequestMovementState(actionName, isActive)
 	DebugLog:Log("ClientMovement", string.format("[InputController] Sending %s=%s", actionName, tostring(isActive)))
 	self.RequestMovementStateRemote:FireServer(actionName, isActive)
-end
-
-function InputController:RequestStruggleInput()
-	self.RequestStruggleInputRemote:FireServer()
 end
 
 function InputController:RequestBreathHoldState(isHolding)

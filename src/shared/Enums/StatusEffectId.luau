@@ -11,6 +11,8 @@ local StatusEffectId = {
 	Bleed = "Bleed",
 	Poison = "Poison",
 	Hemorrhaged = "Hemorrhaged",
+	OpenWounds = "OpenWounds",
+	DeepWounds = "DeepWounds",
 	NilValue = "nil.value",
 }
 

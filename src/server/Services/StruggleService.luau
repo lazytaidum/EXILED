@@ -1,13 +1,13 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local StatusEffectId = require(ReplicatedStorage.Shared.Enums.StatusEffectId)
+local QTEType = require(ReplicatedStorage.Shared.Enums.QTEType)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local StruggleService = {}
 StruggleService.Name = "StruggleService"
 StruggleService.Dependencies = {
-	"RemoteRegistry",
+	"QTEService",
 	"CharacterService",
 	"StatusEffectService",
 	"InteractionService",
@@ -21,13 +21,6 @@ function StruggleService:Init(services)
 end
 
 function StruggleService:Start()
-	self.StruggleStateRemote = self.RemoteRegistry:GetRemote(RemoteNames.StruggleStateChanged)
-	local requestStruggleInput = self.RemoteRegistry:GetRemote(RemoteNames.RequestStruggleInput)
-
-	requestStruggleInput.OnServerEvent:Connect(function(player)
-		self:HandleStruggleInput(player)
-	end)
-
 	task.spawn(function()
 		self:_runLoop()
 	end)
@@ -52,6 +45,7 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 
 	local now = os.clock()
 	local duration = params.Duration or 6
+	local qteConfig = params.QTE or {}
 	local struggle = {
 		Entity = entity,
 		TargetPlayer = targetPlayer,
@@ -85,23 +79,37 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 		})
 	end
 
-	self:_syncStruggle(targetPlayer, struggle, "Start")
+	self.QTEService:StartSession(targetPlayer, {
+		Type = qteConfig.Type or QTEType.KeyMash,
+		Duration = duration,
+		Prompt = qteConfig.Prompt or "Mash Space to struggle free",
+		SubPrompt = qteConfig.SubPrompt or "Break free before Jiangshi drains your Qi",
+		RequiredKey = qteConfig.RequiredKey or "Space",
+		Keys = qteConfig.Keys,
+		Progress = 0,
+		MaxProgress = struggle.MaxProgress,
+		ProgressPerPress = qteConfig.ProgressPerPress or struggle.ProgressPerPress,
+		WrongPenalty = qteConfig.WrongPenalty or 0.05,
+		TargetDistance = qteConfig.TargetDistance,
+		MinSliceDelta = qteConfig.MinSliceDelta,
+		DialAngle = qteConfig.DialAngle,
+		DialSpeed = qteConfig.DialSpeed,
+		DialDirection = qteConfig.DialDirection,
+		SuccessAngle = qteConfig.SuccessAngle,
+		SuccessAngleSize = qteConfig.SuccessAngleSize,
+		OnProgress = function(_, session)
+			struggle.Progress = session.Progress
+		end,
+		OnSuccess = function(player)
+			self:_breakFree(player, struggle)
+		end,
+		OnFail = function(player, _, reason)
+			self:_endStruggle(player, reason)
+		end,
+	})
+
 	DebugLog:Log("Interaction", string.format("[StruggleService] %s began struggle on %s", entity.DisplayName, targetPlayer.Name))
 	return true
-end
-
-function StruggleService:HandleStruggleInput(player)
-	local struggle = self.ActiveStruggles[player]
-	if not struggle then
-		return
-	end
-
-	struggle.Progress = math.min(struggle.MaxProgress, struggle.Progress + struggle.ProgressPerPress)
-	self:_syncStruggle(player, struggle, "Update")
-
-	if struggle.Progress >= struggle.MaxProgress then
-		self:_breakFree(player, struggle)
-	end
 end
 
 function StruggleService:IsPlayerStruggling(player)
@@ -137,7 +145,6 @@ function StruggleService:_updateStruggles()
 				self.EntityService:_handleTargetDowned(struggle.Entity, player, targetCharacter)
 			end
 			struggle.NextTickAt += 1
-			self:_syncStruggle(player, struggle, "Update")
 		end
 
 		if now >= struggle.EndsAt then
@@ -158,10 +165,7 @@ function StruggleService:_breakFree(player, struggle)
 	end
 
 	self.ActiveStruggles[player] = nil
-	self.StruggleStateRemote:FireClient(player, {
-		State = "Stop",
-		Reason = "Escaped",
-	})
+	self.QTEService:StopSession(player, "Escaped")
 
 	DebugLog:Log("Interaction", string.format("[StruggleService] %s escaped %s", player.Name, struggle.Entity.DisplayName))
 end
@@ -179,26 +183,7 @@ function StruggleService:_endStruggle(player, reason)
 	end
 
 	self.ActiveStruggles[player] = nil
-	self.StruggleStateRemote:FireClient(player, {
-		State = "Stop",
-		Reason = reason or "Ended",
-	})
-end
-
-function StruggleService:_syncStruggle(player, struggle, state)
-	if not self.StruggleStateRemote then
-		return
-	end
-
-	self.StruggleStateRemote:FireClient(player, {
-		State = state or "Update",
-		Prompt = "Mash Space to struggle free",
-		SubPrompt = "Break free before Jiangshi drains your Qi",
-		RequiredKey = "SPACE",
-		Progress = struggle.Progress,
-		Max = struggle.MaxProgress,
-		Duration = math.max(0, struggle.EndsAt - os.clock()),
-	})
+	self.QTEService:StopSession(player, reason or "Ended")
 end
 
 return StruggleService

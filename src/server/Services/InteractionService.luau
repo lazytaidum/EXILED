@@ -10,6 +10,7 @@ InteractionService.Dependencies = {
 	"RemoteRegistry",
 	"RoundManager",
 	"StatusEffectService",
+	"QTEService",
 	"CharacterService",
 	"ObjectiveService",
 }
@@ -50,6 +51,15 @@ function InteractionService:StartInteraction(player)
 
 	local statusService = self.StatusEffectService
 	if statusService and not statusService:CanInteract(player) then
+		if self.QTEService and self.QTEService:IsSessionActive(player) then
+			self.QTEService:HandleInput(player, {
+				Kind = "Press",
+				Key = "Space",
+			})
+			DebugLog:Log("Interaction", string.format("[InteractionService] Routed interact press from %s into active QTE", player.Name))
+			return
+		end
+
 		DebugLog:Log("Interaction", string.format("[InteractionService] Ignored start for %s: status blocked", player.Name))
 		return
 	end

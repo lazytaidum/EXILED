@@ -47,6 +47,8 @@ function BreathHoldService:BeginChallenge(entity, params)
 	local duration = params.Duration or 3
 	local indicatorDuration = params.IndicatorDuration or 2.5
 	local reactionWindow = params.ReactionWindow or 1
+	local entityPosition = entity:GetPosition()
+	local radius = params.Radius
 	local challenge = {
 		Id = challengeId,
 		Entity = entity,
@@ -61,25 +63,38 @@ function BreathHoldService:BeginChallenge(entity, params)
 		BaseHasteDuration = params.HasteDuration or 5,
 		FailDrainRate = params.FailDrainRate or (reactionWindow > 0 and (1 / reactionWindow) or 1),
 		HoldDrainRate = params.HoldDrainRate or 0.05,
+		Radius = radius,
 		Participants = {},
 	}
 
 	for _, player in ipairs(activePlayers) do
 		local roundState = self.RoundManager:GetRoundState(player)
 		if roundState and roundState.IsAlive then
-			challenge.Participants[player] = {
-				IsHolding = false,
-				BreathRemaining = 1,
-			}
+			local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
+			local isInRange = true
+			if radius and entityPosition and character and character.RootPart then
+				isInRange = (character.RootPart.Position - entityPosition).Magnitude <= radius
+			end
 
-			self.BreathHoldStateRemote:FireClient(player, {
-				State = "Indicator",
-				Duration = indicatorDuration,
-				Prompt = "Breathless Hunt",
-				SubPrompt = "Mist gathers. Be ready to hold your breath.",
-				RequiredKey = "GET READY",
-			})
+			if isInRange then
+				challenge.Participants[player] = {
+					IsHolding = false,
+					BreathRemaining = 1,
+				}
+
+				self.BreathHoldStateRemote:FireClient(player, {
+					State = "Indicator",
+					Duration = indicatorDuration,
+					Prompt = "Breathless Hunt",
+					SubPrompt = "Mist gathers. Be ready to hold your breath.",
+					RequiredKey = "GET READY",
+				})
+			end
 		end
+	end
+
+	if next(challenge.Participants) == nil then
+		return false
 	end
 
 	self.ActiveChallenges[challengeId] = challenge

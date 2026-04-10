@@ -169,6 +169,9 @@ function RoundManager:ClearRound()
 	table.clear(self.ActivePlayers)
 	table.clear(self.RoundStates)
 	self.CurrentOutcome = RoundOutcome.None
+	if self.Services.InterestService then
+		self.Services.InterestService:Reset()
+	end
 	if self.Services.RoundHookService then
 		self.Services.RoundHookService:ResetHooks()
 	end

@@ -72,6 +72,10 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 	if roundManager then
 		roundManager:ApplyCurrentPhaseStateToPlayer(player)
 	end
+
+	if self.Services.StaminaService then
+		self.Services.StaminaService:ResetPlayer(player)
+	end
 	
 	character.Humanoid.Died:Connect(function()
 		if character.IsInvincible then

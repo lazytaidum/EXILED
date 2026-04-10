@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StatusEffectId = require(ReplicatedStorage.Shared.Enums.StatusEffectId)
 local QTEType = require(ReplicatedStorage.Shared.Enums.QTEType)
+local InteractableType = require(ReplicatedStorage.Shared.Enums.InteractableType)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local StruggleService = {}
@@ -59,9 +60,13 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 		NextTickAt = now + 1,
 		EntityRecoverStunDuration = params.EntityRecoverStunDuration or 1,
 		TargetStatusId = params.TargetStatusId or StatusEffectId.Stunned,
+		PeelDuration = params.PeelDuration or 1.2,
+		PeelRange = params.PeelRange or 10,
+		PeelProgress = 0,
 	}
 
 	self.ActiveStruggles[targetPlayer] = struggle
+	self:_setGrabDebugMarker(targetPlayer, entity)
 
 	if self.InteractionService and self.InteractionService:IsInteracting(targetPlayer) then
 		self.InteractionService:InterruptInteraction(targetPlayer, "Struggle")
@@ -116,6 +121,66 @@ function StruggleService:IsPlayerStruggling(player)
 	return self.ActiveStruggles[player] ~= nil
 end
 
+function StruggleService:GetPeelInteractable(helperPlayer)
+	local helperCharacter = self.CharacterService:GetCharacterByPlayer(helperPlayer)
+	if not helperCharacter or not helperCharacter.RootPart then
+		return nil
+	end
+
+	local helperPosition = helperCharacter.RootPart.Position
+	for victimPlayer, struggle in pairs(self.ActiveStruggles) do
+		if victimPlayer ~= helperPlayer then
+			local victimCharacter = self.CharacterService:GetCharacterByPlayer(victimPlayer)
+			if victimCharacter and victimCharacter.RootPart and victimCharacter:IsAlive() then
+				local distance = (victimCharacter.RootPart.Position - helperPosition).Magnitude
+				if distance <= struggle.PeelRange then
+					return {
+						Type = InteractableType.StrugglePeel,
+						DisplayName = string.format("Peel %s Off", struggle.Entity.DisplayName),
+						Instance = victimCharacter.RootPart,
+						Progress = struggle.PeelProgress,
+						MaxProgress = 1,
+						ChargeRate = 1 / struggle.PeelDuration,
+						StruggleTargetPlayer = victimPlayer,
+					}
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+function StruggleService:ProgressPeel(helperPlayer, interactable, amount)
+	if not interactable or interactable.Type ~= InteractableType.StrugglePeel then
+		return false, false
+	end
+
+	local struggle = self.ActiveStruggles[interactable.StruggleTargetPlayer]
+	if not struggle then
+		return false, true
+	end
+
+	local helperCharacter = self.CharacterService:GetCharacterByPlayer(helperPlayer)
+	local victimCharacter = self.CharacterService:GetCharacterByPlayer(interactable.StruggleTargetPlayer)
+	if not helperCharacter or not helperCharacter.RootPart or not victimCharacter or not victimCharacter.RootPart then
+		return false, true
+	end
+
+	local distance = (victimCharacter.RootPart.Position - helperCharacter.RootPart.Position).Magnitude
+	if distance > struggle.PeelRange then
+		return false, true
+	end
+
+	struggle.PeelProgress = math.clamp((struggle.PeelProgress or 0) + amount, 0, 1)
+	if struggle.PeelProgress >= 1 then
+		self:_peelFree(interactable.StruggleTargetPlayer, struggle, helperPlayer)
+		return true, true
+	end
+
+	return true, false
+end
+
 function StruggleService:_runLoop()
 	while true do
 		self:_updateStruggles()
@@ -165,9 +230,28 @@ function StruggleService:_breakFree(player, struggle)
 	end
 
 	self.ActiveStruggles[player] = nil
+	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, "Escaped")
 
 	DebugLog:Log("Interaction", string.format("[StruggleService] %s escaped %s", player.Name, struggle.Entity.DisplayName))
+end
+
+function StruggleService:_peelFree(player, struggle, helperPlayer)
+	local statusService = self.StatusEffectService
+	if statusService then
+		statusService:RemoveStatus(player, struggle.TargetStatusId)
+		statusService:RemoveStatus(struggle.Entity, StatusEffectId.Stunned)
+		statusService:ApplyStatus(struggle.Entity, StatusEffectId.Stunned, {
+			Duration = struggle.EntityRecoverStunDuration,
+			Source = "BlindHungerPeeled",
+		})
+	end
+
+	self.ActiveStruggles[player] = nil
+	self:_clearGrabDebugMarker(player)
+	self.QTEService:StopSession(player, "Peeled")
+
+	DebugLog:Log("Interaction", string.format("[StruggleService] %s peeled %s off %s", helperPlayer and helperPlayer.Name or "Unknown", struggle.Entity.DisplayName, player.Name))
 end
 
 function StruggleService:_endStruggle(player, reason)
@@ -183,7 +267,47 @@ function StruggleService:_endStruggle(player, reason)
 	end
 
 	self.ActiveStruggles[player] = nil
+	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, reason or "Ended")
+end
+
+function StruggleService:_setGrabDebugMarker(player, entity)
+	local character = self.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.Model then
+		return
+	end
+
+	character.Model:SetAttribute("DebugIsGrabbed", true)
+	character.Model:SetAttribute("DebugGrabbedBy", entity and entity.DisplayName or "Entity")
+
+	local existing = character.Model:FindFirstChild("StruggleDebugHighlight")
+	if existing then
+		existing:Destroy()
+	end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "StruggleDebugHighlight"
+	highlight.FillColor = Color3.fromRGB(214, 92, 92)
+	highlight.FillTransparency = 0.55
+	highlight.OutlineColor = Color3.fromRGB(255, 208, 122)
+	highlight.OutlineTransparency = 0.1
+	highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	highlight.Parent = character.Model
+end
+
+function StruggleService:_clearGrabDebugMarker(player)
+	local character = self.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.Model then
+		return
+	end
+
+	character.Model:SetAttribute("DebugIsGrabbed", nil)
+	character.Model:SetAttribute("DebugGrabbedBy", nil)
+
+	local existing = character.Model:FindFirstChild("StruggleDebugHighlight")
+	if existing then
+		existing:Destroy()
+	end
 end
 
 return StruggleService

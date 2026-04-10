@@ -9,6 +9,7 @@ MovementService.Name = "MovementService"
 MovementService.Dependencies = {
 	"RemoteRegistry",
 	"CharacterService",
+	"StaminaService",
 	"StatusEffectService",
 	"InteractionService",
 	"PlayerService",
@@ -46,11 +47,16 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		return
 	end
 
-	if not self.World:CanUseAbilities(player) then
+	local statusEffectService = self.StatusEffectService
+	if statusEffectService and statusEffectService:HasFlag(player, "Stunned") then
 		return
 	end
 
 	if actionName == ActionName.Sprint then
+		if isActive and self.StaminaService and not self.StaminaService:HasSprintStamina(player) then
+			return
+		end
+
 		if isActive and self.World:IsInteracting(player) then
 			self.World:InterruptInteraction(player, "Sprint")
 		end
@@ -63,6 +69,10 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		if isActive then
 			character:SetSprinting(false)
 		end
+	end
+
+	if self.StaminaService then
+		self.StaminaService:RefreshPlayer(player)
 	end
 
 	local stateKey = MOVEMENT_STATE_KEYS[actionName]

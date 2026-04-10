@@ -12,6 +12,7 @@ InputController.Name = "InputController"
 InputController.Dependencies = {
 	"QTEController",
 	"BreathHoldController",
+	"RemnantController",
 }
 
 function InputController:Init()
@@ -20,6 +21,7 @@ function InputController:Init()
 	self.RequestInteractRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestInteract)
 	self.RequestMovementStateRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestMovementState)
 	self.RequestBreathHoldStateRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestBreathHoldState)
+	self.RequestRemnantAbilityRemote = self.RemotesFolder:WaitForChild(RemoteNames.RequestRemnantAbility)
 	self.Keybinds = DefaultKeybinds.Keyboard or {}
 end
 
@@ -118,6 +120,27 @@ function InputController:_handleKeyboardInput(keyCode, isPressed)
 		elseif actionToken == ActionToken.Crouch then
 			DebugLog:Log("ClientMovement", string.format("[InputController] Crouch key %s", isPressed and "pressed" or "released"))
 			self:RequestMovementState(ActionName.Crouch, isPressed)
+		elseif actionToken == ActionToken.Ability1 and isPressed then
+			DebugLog:Log("ClientRemnant", "[InputController] Ability1 pressed")
+			if self.RemnantController then
+				self.RemnantController:TriggerAbility("Ability1")
+			else
+				self.RequestRemnantAbilityRemote:FireServer("Ability1")
+			end
+		elseif actionToken == ActionToken.Ability2 and isPressed then
+			DebugLog:Log("ClientRemnant", "[InputController] Ability2 pressed")
+			if self.RemnantController then
+				self.RemnantController:TriggerAbility("Ability2")
+			else
+				self.RequestRemnantAbilityRemote:FireServer("Ability2")
+			end
+		elseif actionToken == ActionToken.Ability3 and isPressed then
+			DebugLog:Log("ClientRemnant", "[InputController] Ability3 pressed")
+			if self.RemnantController then
+				self.RemnantController:TriggerAbility("Ability3")
+			else
+				self.RequestRemnantAbilityRemote:FireServer("Ability3")
+			end
 		end
 	end
 end

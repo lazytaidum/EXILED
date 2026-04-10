@@ -15,6 +15,8 @@ EntityService.Dependencies = {
 	"RoundManager",
 	"RoundHookService",
 	"CharacterService",
+	"InterestService",
+	"StaminaService",
 	"StatusEffectService",
 	"InteractionService",
 	"StruggleService",
@@ -31,6 +33,8 @@ local ENTITY_STATE = {
 	Rage = "Rage",
 }
 
+local RECENT_HIT_DEBUG_DURATION = 0.75
+
 function EntityService:Init(services)
 	self.Services = services
 	self.Entities = {}
@@ -39,14 +43,23 @@ function EntityService:Init(services)
 	self.NextRoundHookRuntimeId = 0
 
 	self.EntitiesFolder = Workspace:WaitForChild("Entities")
+	self.MapBounds = Workspace:FindFirstChild("MapBounds")
+	self.TemplateSourceFolder = ServerStorage:FindFirstChild("EntityTemplates")
+	if not self.TemplateSourceFolder then
+		self.TemplateSourceFolder = Instance.new("Folder")
+		self.TemplateSourceFolder.Name = "EntityTemplates"
+		self.TemplateSourceFolder.Parent = ServerStorage
+	end
+
 	self.TemplateStorage = Instance.new("Folder")
-	self.TemplateStorage.Name = "EntityTemplates"
+	self.TemplateStorage.Name = "EntityTemplateCache"
 	self.TemplateStorage.Parent = ServerStorage
 	self.RaycastParams = RaycastParams.new()
 	self.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 end
 
 function EntityService:Start()
+	self:_registerExistingTemplates()
 	self:_registerExistingEntities()
 
 	task.spawn(function()
@@ -54,6 +67,15 @@ function EntityService:Start()
 	end)
 
 	DebugLog:Log("Entity", "[EntityService] Started")
+end
+
+function EntityService:_registerExistingTemplates()
+	for _, model in ipairs(self.TemplateSourceFolder:GetChildren()) do
+		if model:IsA("Model") and model.PrimaryPart then
+			local definition = EntityDefinitions[model.Name]
+			self:_cacheEntityTemplate(model, definition)
+		end
+	end
 end
 
 function EntityService:_registerExistingEntities()
@@ -94,6 +116,7 @@ function EntityService:_registerEntityModel(model, runtimeData)
 
 	self:_cacheEntityTemplate(model, definition)
 	table.insert(self.Entities, entity)
+	self:_syncDebugAttributes(entity)
 
 	DebugLog:Log("Entity", string.format(
 		"[EntityService] Registered entity: %s | Stars: %d | Weight: %d",
@@ -133,6 +156,7 @@ function EntityService:_updateEntity(entity, deltaTime)
 	self:_tryUseAbility(entity, candidates)
 	self:_updateEntityMovement(entity, deltaTime)
 	self:_tryBasicAttack(entity)
+	self:_syncDebugAttributes(entity)
 end
 
 function EntityService:_collectTargetCandidates(entity)
@@ -158,7 +182,8 @@ function EntityService:_collectTargetCandidates(entity)
 				local livePosition = character.RootPart.Position
 				local distance = (livePosition - entityPosition).Magnitude
 				local isFullyAbsorbed = entity.IsPlayerFullyAbsorbed and entity:IsPlayerFullyAbsorbed(player)
-				local isVisible = distance <= entity:GetDetectionRange() and self:_hasLineOfSight(entity, character)
+				local canSenseTarget = entity.IgnoreLineOfSightForDetection or self:_hasLineOfSight(entity, character)
+				local isVisible = distance <= entity:GetDetectionRange() and canSenseTarget
 				local isDetected = isVisible or isFullyAbsorbed
 				local memory = entity:GetTargetMemory(player)
 				local candidatePosition = livePosition
@@ -272,7 +297,15 @@ function EntityService:_updateEntityState(entity)
 	end
 
 	if entity:HasAttentionOnTarget(targetPlayer) then
-		entity:EnterState(ENTITY_STATE.Chase)
+		local lastKnownPosition = entity:GetTargetLastKnownPosition()
+		local hasRecentlySeenTarget = entity:GetTimeSinceTargetWasVisible(targetPlayer) <= entity.ChaseLostSightGraceDuration
+		local shouldKeepChasing = hasRecentlySeenTarget
+
+		if lastKnownPosition and not shouldKeepChasing then
+			shouldKeepChasing = not entity:IsNearPosition(lastKnownPosition, entity:GetStopDistance() + 1)
+		end
+
+		entity:EnterState(shouldKeepChasing and ENTITY_STATE.Chase or ENTITY_STATE.Scout)
 	else
 		entity:EnterState(ENTITY_STATE.Scout)
 	end
@@ -353,6 +386,7 @@ function EntityService:_tryUseAbility(entity, candidates)
 	entity:SetCooldown(abilityId, ability.Cooldown or 0)
 
 	DebugLog:Log("Entity", string.format("[EntityService] %s began %s", entity.DisplayName, abilityId))
+	self:_markLastAbility(entity, abilityId)
 end
 
 function EntityService:_selectAbility(entity, candidates)
@@ -403,6 +437,17 @@ function EntityService:_canUseAbility(entity, ability, candidates)
 				return false
 			end
 		elseif currentState ~= requireState then
+			return false
+		end
+	end
+
+	if ability.MinStateDuration then
+		local currentState = entity:GetState()
+		local requiredState = ability.MinStateDuration.State
+		local minimumDuration = ability.MinStateDuration.Duration or 0
+		if requiredState and currentState ~= requiredState then
+			-- This condition only applies while the entity is in the specified state.
+		elseif entity:GetStateDuration() < minimumDuration then
 			return false
 		end
 	end
@@ -605,6 +650,7 @@ function EntityService:_resolveAbility(entity, ability, targetPlayer)
 	self:_executeEffectSteps(entity, ability, context)
 
 	DebugLog:Log("Entity", string.format("[EntityService] %s resolved %s", entity.DisplayName, ability.Id or "Ability"))
+	self:_syncDebugAttributes(entity)
 end
 
 function EntityService:_updateEntityMovement(entity, deltaTime)
@@ -634,13 +680,23 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 		entity:EndSearchMode()
 	end
 
+	if entity:ShouldRelocateRoamAnchor() then
+		entity:ClearPatrolDestination()
+		if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2.5) then
+			self:_maybeRelocateRoamAnchor(entity, true)
+		end
+	end
+
 	if entity:IsPatrolPaused() then
 		return
 	end
 
 	local destination = entity:GetPatrolDestination()
 	if not destination then
-		destination = entity:PickPatrolDestination()
+		if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2.5) then
+			self:_maybeRelocateRoamAnchor(entity, true)
+		end
+		destination = self:_pickReachablePatrolDestination(entity)
 	end
 
 	if not destination then
@@ -648,17 +704,39 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 	end
 
 	if entity:HasReachedPatrolDestination() then
+		local destinationReason = entity:GetPatrolDestinationReason()
+		entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity:GetPosition()))
+		entity:ClearPatrolDestination()
 		if entity.SearchMode then
-			entity:PickPatrolDestination()
+			if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 3) then
+				self:_maybeRelocateRoamAnchor(entity, true)
+			end
+			self:_pickReachablePatrolDestination(entity)
 			destination = entity:GetPatrolDestination()
 			if not destination then
 				return
 			end
 		else
-			entity:MarkPatrolPause()
-			entity:PickPatrolDestination()
-			return
+			if destinationReason ~= "Interest" then
+				entity:MarkPatrolPause()
+			end
+			if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2) then
+				self:_maybeRelocateRoamAnchor(entity, false)
+			end
+			self:_pickReachablePatrolDestination(entity)
+			if destinationReason ~= "Interest" then
+				return
+			end
 		end
+	end
+
+	if self:_isMovementStepBlocked(entity, destination) then
+		entity:ClearPatrolDestination()
+		if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2) then
+			self:_maybeRelocateRoamAnchor(entity, true)
+		end
+		self:_pickReachablePatrolDestination(entity)
+		return
 	end
 
 	entity:MoveToward(destination, deltaTime)
@@ -670,13 +748,51 @@ function EntityService:_updateScoutMovement(entity, deltaTime)
 		entity:ClearScoutArrival()
 		entity:SetTarget(nil)
 		entity:EnterState(ENTITY_STATE.Patrol)
+		entity:ClearPatrolDestination()
+		entity.PatrolPauseUntil = 0
+		self:_pickReachablePatrolDestination(entity)
 		return
 	end
 
+	local scoutDestination = entity:GetPatrolDestination()
+	if scoutDestination then
+		if entity:IsNearPosition(scoutDestination, entity:GetStopDistance() + 0.5) then
+			entity:ClearPatrolDestination()
+			if entity:HasScoutSweepRemaining() then
+				self:_pickReachableScoutDestination(entity)
+			else
+				local targetPlayer = entity:GetTarget()
+				entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity.ScoutOrigin or destination))
+				entity:ClearScoutArrival()
+				if targetPlayer then
+					entity:ForgetTarget(targetPlayer)
+				else
+					entity:SetTarget(nil)
+				end
+				entity:EnterState(ENTITY_STATE.Patrol)
+				entity.PatrolPauseUntil = 0
+				self:_pickReachablePatrolDestination(entity)
+			end
+			return
+		end
+
+	if self:_isMovementStepBlocked(entity, scoutDestination) then
+		entity:ClearPatrolDestination()
+		self:_pickReachableScoutDestination(entity)
+		return
+	end
+
+	entity:MoveToward(scoutDestination, deltaTime)
+	return
+end
+
 	if entity:HasReachedScoutDestination() then
-		entity:MarkScoutArrival()
-		if entity:HasFinishedScoutLinger() then
+		entity:BeginScoutSweep(destination)
+		if entity:HasScoutSweepRemaining() then
+			self:_pickReachableScoutDestination(entity)
+		else
 			local targetPlayer = entity:GetTarget()
+			entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity.ScoutOrigin or destination))
 			entity:ClearScoutArrival()
 			if targetPlayer then
 				entity:ForgetTarget(targetPlayer)
@@ -684,13 +800,215 @@ function EntityService:_updateScoutMovement(entity, deltaTime)
 				entity:SetTarget(nil)
 			end
 			entity:EnterState(ENTITY_STATE.Patrol)
-			entity:PickPatrolDestination()
+			entity.PatrolPauseUntil = 0
+			self:_pickReachablePatrolDestination(entity)
 		end
 		return
 	end
 
 	entity:ClearScoutArrival()
+	if self:_isMovementStepBlocked(entity, destination) then
+		entity:BeginScoutSweep(destination)
+		if entity:HasScoutSweepRemaining() then
+			self:_pickReachableScoutDestination(entity)
+		end
+		return
+	end
+
 	entity:MoveToward(destination, deltaTime)
+end
+
+function EntityService:_maybeRelocateRoamAnchor(entity, forceRelocate)
+	if not self.MapBounds or not self.MapBounds:IsA("BasePart") then
+		return false
+	end
+
+	if not forceRelocate and entity.Random:NextNumber() > entity.GlobalPatrolRelocateChance then
+		return false
+	end
+
+	local anchor = self:_pickRandomPointInMapBounds(entity)
+	if not anchor then
+		return false
+	end
+
+	entity:SetRoamAnchor(self:_clampPositionToMapBounds(anchor))
+	return true
+end
+
+function EntityService:_tryAssignInterestDestination(entity, radius)
+	local interestService = self.InterestService
+	if not interestService then
+		return false
+	end
+
+	local entityPosition = entity:GetPosition()
+	local preferredPlayer = entity:GetTarget()
+	local interestPoint = interestService:GetStrongestInterestNear(entityPosition, radius, {
+		WeightByDirection = true,
+		PreferPlayer = preferredPlayer,
+	})
+	if not interestPoint then
+		return false
+	end
+
+	local interestDestination = interestPoint.Destination or interestPoint.Position
+	if not entity.IgnoreLineOfSightForInterest then
+		local canSeeProjected = self:_hasLineOfSightToPosition(entity, interestDestination)
+		local canSeeOrigin = self:_hasLineOfSightToPosition(entity, interestPoint.Position)
+
+		if not canSeeProjected then
+			interestDestination = self:_resolveInterestInvestigationPoint(entity, interestPoint, canSeeOrigin)
+		end
+	end
+
+	local clampedPosition = self:_clampPositionToMapBounds(interestDestination)
+	entity:SetRoamAnchor(clampedPosition)
+	entity:SetPatrolDestination(clampedPosition, "Interest")
+	return true
+end
+
+function EntityService:_pickRandomPointInMapBounds(entity)
+	local boundsPart = self.MapBounds
+	if not boundsPart or not boundsPart:IsA("BasePart") then
+		return nil
+	end
+
+	local size = boundsPart.Size
+	local center = boundsPart.Position
+	local currentPosition = entity:GetPosition() or center
+	local y = currentPosition.Y
+
+	for _ = 1, 12 do
+		local x = center.X + entity.Random:NextNumber(-size.X * 0.5, size.X * 0.5)
+		local z = center.Z + entity.Random:NextNumber(-size.Z * 0.5, size.Z * 0.5)
+		local candidate = Vector3.new(x, y, z)
+		if not entity:IsNearPosition(candidate, entity.PatrolPointMinDistance * 2) then
+			return self:_clampPositionToMapBounds(candidate)
+		end
+	end
+
+	return self:_clampPositionToMapBounds(Vector3.new(center.X, y, center.Z))
+end
+
+function EntityService:_pickReachablePatrolDestination(entity)
+	local currentDestination = entity:GetPatrolDestination()
+	if currentDestination
+		and not entity:IsNearPosition(currentDestination, entity:GetStopDistance() + 0.5)
+		and self:_isNavigationDestinationReachable(entity, currentDestination)
+	then
+		return currentDestination
+	end
+
+	for _ = 1, 8 do
+		local destination = self:_clampPositionToMapBounds(entity:PickPatrolDestination())
+		if destination then
+			entity:SetPatrolDestination(destination, "Patrol")
+		end
+		if not destination or self:_isNavigationDestinationReachable(entity, destination) then
+			return destination
+		end
+	end
+
+	return entity:GetPatrolDestination()
+end
+
+function EntityService:_pickReachableScoutDestination(entity)
+	local currentDestination = entity:GetPatrolDestination()
+	if currentDestination
+		and not entity:IsNearPosition(currentDestination, entity:GetStopDistance() + 0.5)
+		and self:_isNavigationDestinationReachable(entity, currentDestination)
+	then
+		return currentDestination
+	end
+
+	for _ = 1, 8 do
+		local destination = self:_clampPositionToMapBounds(entity:PickScoutDestination())
+		if destination then
+			entity:SetPatrolDestination(destination, "Scout")
+		end
+		if not destination or self:_isNavigationDestinationReachable(entity, destination) then
+			return destination
+		end
+	end
+
+	return entity:GetPatrolDestination()
+end
+
+function EntityService:_clampPositionToMapBounds(position)
+	local boundsPart = self.MapBounds
+	if not position or not boundsPart or not boundsPart:IsA("BasePart") then
+		return position
+	end
+
+	local size = boundsPart.Size
+	local center = boundsPart.Position
+	local halfX = math.max(0, (size.X * 0.5) - 2)
+	local halfZ = math.max(0, (size.Z * 0.5) - 2)
+
+	return Vector3.new(
+		math.clamp(position.X, center.X - halfX, center.X + halfX),
+		position.Y,
+		math.clamp(position.Z, center.Z - halfZ, center.Z + halfZ)
+	)
+end
+
+function EntityService:_isNavigationDestinationReachable(entity, destination)
+	local origin = entity:GetPosition()
+	if not origin or not destination then
+		return true
+	end
+
+	local direction = destination - origin
+	if direction.Magnitude <= entity:GetStopDistance() then
+		return true
+	end
+
+	self.RaycastParams.FilterDescendantsInstances = {
+		entity.Model,
+		self.EntitiesFolder,
+		self.MapBounds,
+	}
+
+	local start = origin + Vector3.new(0, 2, 0)
+	local result = Workspace:Raycast(start, direction, self.RaycastParams)
+	if not result then
+		return true
+	end
+
+	return (result.Position - start).Magnitude >= (direction.Magnitude - 1)
+end
+
+function EntityService:_isMovementStepBlocked(entity, destination)
+	if entity.SearchMode and entity.SearchMode.IgnoreMovementBlockers then
+		return false
+	end
+
+	local origin = entity:GetPosition()
+	if not origin or not destination then
+		return false
+	end
+
+	local direction = destination - origin
+	local distance = direction.Magnitude
+	if distance <= entity:GetStopDistance() then
+		return false
+	end
+
+	local moveDistance = math.min(distance - entity:GetStopDistance(), entity:GetMoveSpeed() * self.UpdateInterval)
+	if moveDistance <= 0 then
+		return false
+	end
+
+	self.RaycastParams.FilterDescendantsInstances = {
+		entity.Model,
+		self.EntitiesFolder,
+		self.MapBounds,
+	}
+
+	local start = origin + Vector3.new(0, 2, 0)
+	local result = Workspace:Raycast(start, direction.Unit * moveDistance, self.RaycastParams)
+	return result ~= nil
 end
 
 function EntityService:_tryBasicAttack(entity)
@@ -718,6 +1036,10 @@ function EntityService:_tryBasicAttack(entity)
 
 	local attackRange = attackDefinition.AttackRange or entity.AttackRange
 	if not entity:IsInRange(targetCharacter.RootPart.Position, attackRange) then
+		return
+	end
+
+	if not entity.IgnoreLineOfSightForAttacks and not self:_hasLineOfSight(entity, targetCharacter) then
 		return
 	end
 
@@ -924,6 +1246,14 @@ function EntityService:_executeEffectStep(entity, step, context)
 				Source = entity.DisplayName,
 			})
 		end
+	elseif stepType == "DrainStaminaTargets" then
+		if not self.StaminaService then
+			return
+		end
+
+		for _, target in ipairs(self:_resolveEffectTargets(entity, step, context)) do
+			self.StaminaService:DrainStamina(target, step.Amount or 0, step.Reason or entity.DisplayName)
+		end
 	elseif stepType == "StartStruggle" then
 		if not self.StruggleService then
 			return
@@ -941,8 +1271,12 @@ function EntityService:_executeEffectStep(entity, step, context)
 	elseif stepType == "StartSearchMode" then
 		local searchId = step.SearchId or "SearchMode"
 		local duration = step.Duration
-		entity:BeginSearchMode(searchId, duration)
-		entity:PickPatrolDestination()
+		entity:BeginSearchMode(searchId, duration, {
+			HeightOffset = step.HeightOffset,
+			IgnoreMovementBlockers = step.IgnoreMovementBlockers,
+			DetectionRadiusMultiplier = step.DetectionRadiusMultiplier,
+		})
+		self:_pickReachablePatrolDestination(entity)
 	elseif stepType == "SpawnEntity" then
 		self:_spawnEntitiesFromEffect(entity, step, context)
 	elseif stepType == "AbsorbAbility" then
@@ -1104,6 +1438,16 @@ function EntityService:SpawnEntity(entityId, params)
 	end
 
 	if not template then
+		local sourceModel = self.TemplateSourceFolder:FindFirstChild(templateName)
+			or self.TemplateSourceFolder:FindFirstChild(entityId)
+			or (sourceDefinition and sourceDefinition.Id and self.TemplateSourceFolder:FindFirstChild(sourceDefinition.Id))
+		if sourceModel and sourceModel:IsA("Model") and sourceModel.PrimaryPart then
+			self:_cacheEntityTemplate(sourceModel, sourceDefinition or definition)
+			template = self.EntityTemplates[templateName]
+		end
+	end
+
+	if not template then
 		for _, existingEntity in ipairs(self.Entities) do
 			local matchesTemplate = existingEntity.TemplateName == templateName
 				or existingEntity.Id == templateName
@@ -1210,6 +1554,37 @@ function EntityService:_despawnEntity(entity, reason)
 	entity:Destroy()
 end
 
+function EntityService:_markLastAbility(entity, abilityId)
+	if not entity or not entity.Model then
+		return
+	end
+
+	entity.Model:SetAttribute("DebugLastAbility", tostring(abilityId or "None"))
+end
+
+function EntityService:_markRecentHit(entity, amount, sourceLabel)
+	if not entity or not entity.Model then
+		return
+	end
+
+	entity.Model:SetAttribute("DebugRecentHitDamage", math.floor((amount or 0) + 0.5))
+	entity.Model:SetAttribute("DebugRecentHitSource", tostring(sourceLabel or "Unknown"))
+	entity.Model:SetAttribute("DebugRecentHitExpiresAt", Workspace:GetServerTimeNow() + RECENT_HIT_DEBUG_DURATION)
+end
+
+function EntityService:_syncDebugAttributes(entity)
+	if not entity or not entity.Model then
+		return
+	end
+
+	entity.Model:SetAttribute("DebugEntityName", entity.DisplayName)
+	entity.Model:SetAttribute("DebugState", entity:GetState())
+	entity.Model:SetAttribute("DebugHealth", math.floor((entity.Health or 0) + 0.5))
+	entity.Model:SetAttribute("DebugMaxHealth", math.floor((entity.MaxHealth or 0) + 0.5))
+	entity.Model:SetAttribute("DebugTarget", entity:GetTarget() and entity:GetTarget().Name or "")
+	entity.Model:SetAttribute("DebugAbsorbedCount", entity.GetAbsorbedAbilityCount and entity:GetAbsorbedAbilityCount() or 0)
+end
+
 function EntityService:DamageEntity(entity, amount, options)
 	options = options or {}
 	if not entity or not amount or amount <= 0 or entity.Health <= 0 then
@@ -1230,6 +1605,7 @@ function EntityService:DamageEntity(entity, amount, options)
 	end
 
 	entity.Health = math.clamp(entity.Health - finalAmount, 0, entity.MaxHealth)
+	self:_markRecentHit(entity, finalAmount, options.SourcePlayer and options.SourcePlayer.Name or options.WeaponId or "Unknown")
 	local relinquished = entity:RegisterIncomingDamage(finalAmount)
 	for _, release in ipairs(relinquished) do
 		DebugLog:Log("Entity", string.format(
@@ -1244,6 +1620,8 @@ function EntityService:DamageEntity(entity, amount, options)
 		entity.IsActive = false
 		DebugLog:Log("Entity", string.format("[EntityService] %s reached 0 health", entity.DisplayName))
 	end
+
+	self:_syncDebugAttributes(entity)
 
 	return true
 end
@@ -1339,7 +1717,7 @@ function EntityService:_collectVisiblePlayers(entity)
 			local character = characterService:GetCharacterByPlayer(player)
 			if character and character.RootPart then
 				local distance = (character.RootPart.Position - entityPosition).Magnitude
-				if distance <= entity:GetDetectionRange() and self:_hasLineOfSight(entity, character) then
+				if distance <= entity:GetDetectionRange() and (entity.IgnoreLineOfSightForDetection or self:_hasLineOfSight(entity, character)) then
 					table.insert(visiblePlayers, player)
 				end
 			end
@@ -1417,6 +1795,7 @@ function EntityService:_hasLineOfSight(entity, character)
 	self.RaycastParams.FilterDescendantsInstances = {
 		entity.Model,
 		self.EntitiesFolder,
+		self.MapBounds,
 	}
 
 	local direction = character.RootPart.Position - origin
@@ -1426,6 +1805,83 @@ function EntityService:_hasLineOfSight(entity, character)
 	end
 
 	return result.Instance and result.Instance:IsDescendantOf(character.Model)
+end
+
+function EntityService:_hasLineOfSightToPosition(entity, position)
+	local origin = entity:GetPosition()
+	if not origin or not position then
+		return false
+	end
+
+	self.RaycastParams.FilterDescendantsInstances = {
+		entity.Model,
+		self.EntitiesFolder,
+		self.MapBounds,
+	}
+
+	local direction = position - origin
+	local result = Workspace:Raycast(origin, direction, self.RaycastParams)
+	return result == nil
+end
+
+function EntityService:_resolveInterestInvestigationPoint(entity, interestPoint, canSeeOrigin)
+	local entityPosition = entity:GetPosition()
+	local originPoint = interestPoint.Position
+	if canSeeOrigin then
+		return originPoint
+	end
+
+	local aroundPoint = self:_findAroundObstaclePoint(entity, originPoint)
+	if aroundPoint then
+		return aroundPoint
+	end
+
+	return self:_projectTowardVisibleInterest(entityPosition, originPoint)
+end
+
+function EntityService:_findAroundObstaclePoint(entity, blockedPosition)
+	local origin = entity:GetPosition()
+	if not origin or not blockedPosition then
+		return nil
+	end
+
+	local direction = blockedPosition - origin
+	local planar = Vector3.new(direction.X, 0, direction.Z)
+	if planar.Magnitude <= 0.01 then
+		return nil
+	end
+
+	local forward = planar.Unit
+	local right = Vector3.new(-forward.Z, 0, forward.X)
+	local baseDistance = math.min(planar.Magnitude, math.max(entity.DetectionRadius * 0.75, 16))
+	local sideDistances = { 8, 14, 20, 28 }
+
+	for _, sideDistance in ipairs(sideDistances) do
+		for _, sign in ipairs({ 1, -1 }) do
+			local candidate = origin + (forward * baseDistance) + (right * sideDistance * sign)
+			candidate = self:_clampPositionToMapBounds(candidate)
+			if self:_hasLineOfSightToPosition(entity, candidate) and self:_isNavigationDestinationReachable(entity, candidate) then
+				return candidate
+			end
+		end
+	end
+
+	return nil
+end
+
+function EntityService:_projectTowardVisibleInterest(origin, blockedPosition)
+	if not origin or not blockedPosition then
+		return blockedPosition
+	end
+
+	local direction = blockedPosition - origin
+	local distance = direction.Magnitude
+	if distance <= 0.01 then
+		return blockedPosition
+	end
+
+	local stepBack = math.min(8, distance * 0.35)
+	return blockedPosition - (direction.Unit * stepBack)
 end
 
 function EntityService:SetAllEntitiesActive(state)

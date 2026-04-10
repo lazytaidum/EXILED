@@ -12,6 +12,18 @@ local RemoteNames = {
 	QTEStateChanged = "QTEStateChanged",
 	RequestBreathHoldState = "RequestBreathHoldState",
 	BreathHoldStateChanged = "BreathHoldStateChanged",
+	RequestPrimaryAttack = "RequestPrimaryAttack",
+	RequestEquipWeapon = "RequestEquipWeapon",
+	RequestUseInventoryItem = "RequestUseInventoryItem",
+	CombatStateChanged = "CombatStateChanged",
+	CombatHitConfirmed = "CombatHitConfirmed",
+	StaminaStateChanged = "StaminaStateChanged",
+	RequestRemnantAbility = "RequestRemnantAbility",
+	RemnantStateChanged = "RemnantStateChanged",
+	AuraRevealStateChanged = "AuraRevealStateChanged",
+	RequestDevCommand = "RequestDevCommand",
+	DevStateChanged = "DevStateChanged",
+	DevPlacementStateChanged = "DevPlacementStateChanged",
 }
 
 return RemoteNames

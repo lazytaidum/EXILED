@@ -74,6 +74,10 @@ local JiangshiDefinition = {
 					"Patrol",
 					"Scout",
 				},
+				MinStateDuration = {
+					State = "Scout",
+					Duration = 1.1,
+				},
 				Weight = 1.2,
 				Chance = 0.55,
 				RequirePlayersInRadius = 250,
@@ -116,6 +120,8 @@ local JiangshiDefinition = {
 						DamagePerSecond = 5,
 						HealPercentPerSecond = 0.02,
 						EntityRecoverStunDuration = 1,
+						PeelDuration = 1.2,
+						PeelRange = 12,
 					},
 				},
 			},
@@ -142,7 +148,7 @@ local JiangshiDefinition = {
 
 			SpiritualFlight = {
 				Id = "SpiritualFlight",
-				CastTime = 0.2,
+				CastTime = 0.9,
 				Cooldown = 60,
 				RequireState = "Patrol",
 				Weight = 0.85,
@@ -152,6 +158,9 @@ local JiangshiDefinition = {
 					{
 						Type = "StartSearchMode",
 						SearchId = "SpiritualFlight",
+						HeightOffset = 24,
+						IgnoreMovementBlockers = true,
+						DetectionRadiusMultiplier = 2.2,
 					},
 				},
 			},
@@ -184,6 +193,13 @@ local JiangshiDefinition = {
 						StatusId = "Power",
 						Duration = 1.0,
 						Magnitude = 0.01,
+					},
+					{
+						Type = "DrainStaminaTargets",
+						Targets = "PlayersInRadius",
+						Radius = 20,
+						Amount = 0.5,
+						Reason = "QiSiphon",
 					},
 				},
 			},

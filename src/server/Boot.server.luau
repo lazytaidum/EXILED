@@ -10,10 +10,17 @@ local ServerWorld = require(ReplicatedStorage.Shared.World.ServerWorld)
 
 local bootOrder = {
 	require(ServicesFolder.RemoteRegistry),
+	require(ServicesFolder.DevService),
 	require(ServicesFolder.PlayerService),
 	require(ServicesFolder.CharacterService),
+	require(ServicesFolder.InterestService),
+	require(ServicesFolder.StaminaService),
 	require(ServicesFolder.MovementService),
 	require(ServicesFolder.StatusEffectService),
+	require(ServicesFolder.InventoryService),
+	require(ServicesFolder.CombatService),
+	require(ServicesFolder.WeaponPickupService),
+	require(ServicesFolder.ItemPickupService),
 	require(ServicesFolder.QTEService),
 	require(ServicesFolder.StruggleService),
 	require(ServicesFolder.BreathHoldService),
@@ -22,6 +29,7 @@ local bootOrder = {
 	require(ServicesFolder.RoundHookService),
 	require(ServicesFolder.InteractionService),
 	require(ServicesFolder.EntityService),
+	require(ServicesFolder.RemnantService),
 	require(ServicesFolder.EscapeService),
 	require(ManagersFolder.RoundManager),
 }

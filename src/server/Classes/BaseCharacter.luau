@@ -236,6 +236,31 @@ function BaseCharacter:ApplyDamage(amount, options)
 	return false
 end
 
+function BaseCharacter:Heal(amount, options)
+	options = options or {}
+	if not self.Humanoid or amount <= 0 then
+		return false
+	end
+
+	if not self:IsAlive() then
+		return false
+	end
+
+	local currentHealth = self.Humanoid.Health
+	local maxHealth = self.Humanoid.MaxHealth
+	if currentHealth >= maxHealth then
+		return false
+	end
+
+	local healAmount = math.min(amount, maxHealth - currentHealth)
+	if healAmount <= 0 then
+		return false
+	end
+
+	self.Humanoid.Health = currentHealth + healAmount
+	return true
+end
+
 function BaseCharacter:RefreshFromStatusEffects()
 	self:_refreshMovement()
 end

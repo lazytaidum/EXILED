@@ -13,6 +13,9 @@ InteractionService.Dependencies = {
 	"QTEService",
 	"CharacterService",
 	"ObjectiveService",
+	"WeaponPickupService",
+	"ItemPickupService",
+	"StruggleService",
 }
 
 function InteractionService:Init(services)
@@ -138,6 +141,17 @@ function InteractionService:FindBestInteractable(player)
 	local playerPosition = character.RootPart.Position
 	local bestTarget = nil
 	local bestDistance = math.huge
+
+	local struggleService = self.StruggleService
+	if struggleService then
+		local peelTarget = struggleService:GetPeelInteractable(player)
+		if peelTarget and peelTarget.Instance then
+			local distance = (peelTarget.Instance.Position - playerPosition).Magnitude
+			if distance <= 12 then
+				return peelTarget
+			end
+		end
+	end
 	
 	for _, objective in ipairs(self.ObjectiveService:GetObjectives()) do
 		if objective.Type == InteractableType.Objective or objective.Type == "MapObjective" then
@@ -150,7 +164,35 @@ function InteractionService:FindBestInteractable(player)
 			end
 		end
 	end
-	
+
+	local weaponPickupService = self.WeaponPickupService
+	if weaponPickupService then
+		for _, pickup in ipairs(weaponPickupService:GetAvailablePickups()) do
+			local pickupInstance = pickup.Instance
+			if pickupInstance then
+				local distance = (pickupInstance.Position - playerPosition).Magnitude
+				if distance <= 12 and distance < bestDistance then
+					bestTarget = pickup
+					bestDistance = distance
+				end
+			end
+		end
+	end
+
+	local itemPickupService = self.ItemPickupService
+	if itemPickupService then
+		for _, pickup in ipairs(itemPickupService:GetAvailablePickups()) do
+			local pickupInstance = pickup.Instance
+			if pickupInstance then
+				local distance = (pickupInstance.Position - playerPosition).Magnitude
+				if distance <= 12 and distance < bestDistance then
+					bestTarget = pickup
+					bestDistance = distance
+				end
+			end
+		end
+	end
+
 	return bestTarget
 end
 
@@ -166,6 +208,52 @@ end
 
 function InteractionService:_updateInteraction(player, interaction)
 	local target = interaction.Target
+
+	if target and target.Type == InteractableType.WeaponPickup then
+		local completed = self.WeaponPickupService and self.WeaponPickupService:CompletePickup(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop"
+		})
+		self:StopInteraction(player)
+		return
+	end
+
+	if target and target.Type == InteractableType.ItemPickup then
+		local completed = self.ItemPickupService and self.ItemPickupService:CompletePickup(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop"
+		})
+		self:StopInteraction(player)
+		return
+	end
+
+	if target and target.Type == InteractableType.StrugglePeel then
+		local amount = target.ChargeRate * self.UpdateInterval
+		local progressed, completed = self.StruggleService and self.StruggleService:ProgressPeel(player, target, amount)
+		if not progressed then
+			self.InteractionStateRemote:FireClient(player, {
+				State = "Stop"
+			})
+			self:StopInteraction(player)
+			return
+		end
+
+		target.Progress = self.StruggleService.ActiveStruggles[target.StruggleTargetPlayer]
+			and self.StruggleService.ActiveStruggles[target.StruggleTargetPlayer].PeelProgress
+			or target.Progress
+
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Update",
+			Target = target.DisplayName,
+			Progress = math.clamp(target.Progress or 0, 0, target.MaxProgress or 1),
+			Max = target.MaxProgress or 1,
+		})
+
+		if completed then
+			self:StopInteraction(player)
+		end
+		return
+	end
 	
 	if target.IsComplete then
 		self.InteractionStateRemote:FireClient(player, {

@@ -8,6 +8,7 @@ local StatusEffectDefinitions = {
 		DisplayName = "Haste",
 		ShortLabel = "HST",
 		IsBuff = true,
+		AllowMultipleInstances = true,
 		AllowedTargets = { "Remnant", "Entity" },
 		DefaultDuration = 5,
 		DefaultMagnitude = 0.15,

@@ -41,7 +41,7 @@ function StatusEffectService:ApplyStatus(target, statusId, params)
 	end
 
 	local targetState = self:_getOrCreateTargetState(target)
-	local instance = targetState.ById[statusId]
+	local instance = self:_getPrimaryStatusInstance(targetState, statusId)
 
 	if definition.IsDamageOverTime then
 		instance = self:_applyDotStatus(target, definition, params or {}, instance)
@@ -62,16 +62,15 @@ function StatusEffectService:RemoveStatus(target, statusId)
 		return false
 	end
 
-	local instance = targetState.ById[statusId]
-	if not instance then
+	local bucket = targetState.ById[statusId]
+	if not bucket or #bucket == 0 then
 		return false
 	end
 
 	targetState.ById[statusId] = nil
 	for index = #targetState.List, 1, -1 do
-		if targetState.List[index] == instance then
+		if targetState.List[index].Id == statusId then
 			table.remove(targetState.List, index)
-			break
 		end
 	end
 
@@ -93,7 +92,8 @@ end
 
 function StatusEffectService:HasStatus(target, statusId)
 	local targetState = self.ActiveStatuses[target]
-	return targetState ~= nil and targetState.ById[statusId] ~= nil
+	local bucket = targetState and targetState.ById[statusId]
+	return bucket ~= nil and #bucket > 0
 end
 
 function StatusEffectService:GetModifier(target, modifierName)
@@ -153,18 +153,37 @@ function StatusEffectService:GetSnapshotForPlayer(player)
 	end
 
 	local now = os.clock()
+	local grouped = {}
 	for _, instance in ipairs(targetState.List) do
-		local definition = StatusEffectDefinitions[instance.Id]
-		table.insert(snapshot, {
-			Id = instance.Id,
-			DisplayName = definition and definition.DisplayName or instance.Id,
-			ShortLabel = definition and definition.ShortLabel or string.sub(instance.Id, 1, 3),
-			IsBuff = definition and definition.IsBuff == true or false,
-			Duration = math.max(0, instance.ExpiresAt - now),
-			Stacks = instance.Stacks or 1,
-			Tier = instance.Tier or 1,
-			Magnitude = instance.Magnitude or 0,
-		})
+		local group = grouped[instance.Id]
+		if not group then
+			local definition = StatusEffectDefinitions[instance.Id]
+			group = {
+				Id = instance.Id,
+				DisplayName = definition and definition.DisplayName or instance.Id,
+				ShortLabel = definition and definition.ShortLabel or string.sub(instance.Id, 1, 3),
+				IsBuff = definition and definition.IsBuff == true or false,
+				Duration = 0,
+				Stacks = 0,
+				Tier = 1,
+				Magnitude = 0,
+				InstanceCount = 0,
+			}
+			grouped[instance.Id] = group
+		end
+
+		group.Duration = math.max(group.Duration, math.max(0, instance.ExpiresAt - now))
+		group.Stacks = math.max(group.Stacks, instance.Stacks or 1)
+		group.Tier = math.max(group.Tier, instance.Tier or 1)
+		group.Magnitude += instance.Magnitude or 0
+		group.InstanceCount += 1
+	end
+
+	for _, group in pairs(grouped) do
+		if group.InstanceCount > 1 then
+			group.Stacks = math.max(group.Stacks, group.InstanceCount)
+		end
+		table.insert(snapshot, group)
 	end
 
 	table.sort(snapshot, function(a, b)
@@ -185,6 +204,21 @@ function StatusEffectService:_applySimpleStatus(target, definition, params, exis
 	end
 
 	local now = os.clock()
+	if definition.AllowMultipleInstances then
+		local instance = {
+			Id = definition.Id,
+			AppliedAt = now,
+			ExpiresAt = now + duration,
+			Magnitude = magnitude,
+			Stacks = params.Stacks or 1,
+			Tier = params.Tier or definition.DefaultTier or 1,
+			Source = params.Source,
+		}
+
+		self:_insertStatusInstance(target, instance)
+		return instance
+	end
+
 	if existing then
 		existing.ExpiresAt = now + duration
 		existing.Magnitude = math.max(existing.Magnitude or 0, magnitude)
@@ -255,8 +289,22 @@ end
 
 function StatusEffectService:_insertStatusInstance(target, instance)
 	local targetState = self:_getOrCreateTargetState(target)
-	targetState.ById[instance.Id] = instance
+	local bucket = targetState.ById[instance.Id]
+	if not bucket then
+		bucket = {}
+		targetState.ById[instance.Id] = bucket
+	end
+	table.insert(bucket, instance)
 	table.insert(targetState.List, instance)
+end
+
+function StatusEffectService:_getPrimaryStatusInstance(targetState, statusId)
+	local bucket = targetState and targetState.ById[statusId]
+	if not bucket or #bucket == 0 then
+		return nil
+	end
+
+	return bucket[1]
 end
 
 function StatusEffectService:_runLoop()
@@ -283,7 +331,19 @@ function StatusEffectService:_updateStatuses()
 			end
 
 			if instance.ExpiresAt <= now then
-				targetState.ById[instance.Id] = nil
+				local bucket = targetState.ById[instance.Id]
+				if bucket then
+					for bucketIndex = #bucket, 1, -1 do
+						if bucket[bucketIndex] == instance then
+							table.remove(bucket, bucketIndex)
+							break
+						end
+					end
+
+					if #bucket == 0 then
+						targetState.ById[instance.Id] = nil
+					end
+				end
 				table.remove(targetState.List, index)
 				changed = true
 

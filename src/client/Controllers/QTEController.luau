@@ -246,7 +246,7 @@ function QTEController:_createUI()
 	container.Name = "Container"
 	container.AnchorPoint = Vector2.new(0.5, 0.75)
 	container.Position = UDim2.new(0.5, 0, 0.75, 0)
-	container.Size = UDim2.new(0, 360, 0, 108)
+	container.Size = UDim2.new(0, 328, 0, 98)
 	container.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
 	container.BackgroundTransparency = 0.05
 	container.BorderSizePixel = 0
@@ -263,7 +263,7 @@ function QTEController:_createUI()
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBold
 	label.TextColor3 = Color3.fromRGB(240, 240, 240)
-	label.TextSize = 17
+	label.TextSize = 16
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = "Quick Time Event"
 	label.Parent = container
@@ -275,32 +275,32 @@ function QTEController:_createUI()
 	subLabel.BackgroundTransparency = 1
 	subLabel.Font = Enum.Font.Gotham
 	subLabel.TextColor3 = Color3.fromRGB(182, 182, 190)
-	subLabel.TextSize = 12
+	subLabel.TextSize = 11
 	subLabel.TextXAlignment = Enum.TextXAlignment.Left
 	subLabel.Text = ""
 	subLabel.Parent = container
 
 	local duration = Instance.new("TextLabel")
 	duration.Name = "Duration"
-	duration.Position = UDim2.new(1, -78, 0, 12)
-	duration.Size = UDim2.new(0, 64, 0, 20)
+	duration.Position = UDim2.new(1, -72, 0, 11)
+	duration.Size = UDim2.new(0, 58, 0, 18)
 	duration.BackgroundTransparency = 1
 	duration.Font = Enum.Font.GothamBold
 	duration.TextColor3 = Color3.fromRGB(240, 240, 240)
-	duration.TextSize = 14
+	duration.TextSize = 13
 	duration.TextXAlignment = Enum.TextXAlignment.Right
 	duration.Text = "0.0s"
 	duration.Parent = container
 
 	local keyLabel = Instance.new("TextLabel")
 	keyLabel.Name = "KeyLabel"
-	keyLabel.Position = UDim2.new(0, 14, 0, 58)
-	keyLabel.Size = UDim2.new(0, 82, 0, 28)
+	keyLabel.Position = UDim2.new(0, 14, 0, 54)
+	keyLabel.Size = UDim2.new(0, 74, 0, 26)
 	keyLabel.BackgroundColor3 = Color3.fromRGB(56, 49, 38)
 	keyLabel.BorderSizePixel = 0
 	keyLabel.Font = Enum.Font.GothamBold
 	keyLabel.TextColor3 = Color3.fromRGB(242, 212, 103)
-	keyLabel.TextSize = 16
+	keyLabel.TextSize = 15
 	keyLabel.Text = "SPACE"
 	keyLabel.Parent = container
 
@@ -312,7 +312,7 @@ function QTEController:_createUI()
 	dialContainer.Name = "DialContainer"
 	dialContainer.AnchorPoint = Vector2.new(0.5, 1)
 	dialContainer.Position = UDim2.new(0.5, 0, 0, -16)
-	dialContainer.Size = UDim2.new(0, 156, 0, 156)
+	dialContainer.Size = UDim2.new(0, 144, 0, 144)
 	dialContainer.BackgroundTransparency = 1
 	dialContainer.Visible = false
 	dialContainer.Parent = container
@@ -321,7 +321,7 @@ function QTEController:_createUI()
 	dialCircle.Name = "DialCircle"
 	dialCircle.AnchorPoint = Vector2.new(0.5, 0.5)
 	dialCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
-	dialCircle.Size = UDim2.new(0, 132, 0, 132)
+	dialCircle.Size = UDim2.new(0, 120, 0, 120)
 	dialCircle.BackgroundColor3 = Color3.fromRGB(22, 24, 29)
 	dialCircle.BackgroundTransparency = 0.12
 	dialCircle.BorderSizePixel = 0
@@ -349,7 +349,7 @@ function QTEController:_createUI()
 	successAnchor.Name = "SuccessAnchor"
 	successAnchor.AnchorPoint = Vector2.new(0.5, 1)
 	successAnchor.Position = UDim2.new(0.5, 0, 0.5, 0)
-	successAnchor.Size = UDim2.new(0, 0, 0, 54)
+	successAnchor.Size = UDim2.new(0, 0, 0, 49)
 	successAnchor.BackgroundTransparency = 1
 	successAnchor.Parent = successMarker
 
@@ -383,7 +383,7 @@ function QTEController:_createUI()
 	pointerArm.Name = "PointerArm"
 	pointerArm.AnchorPoint = Vector2.new(0.5, 1)
 	pointerArm.Position = UDim2.new(0.5, 0, 0.5, 0)
-	pointerArm.Size = UDim2.new(0, 4, 0, 56)
+	pointerArm.Size = UDim2.new(0, 4, 0, 50)
 	pointerArm.BackgroundColor3 = Color3.fromRGB(232, 122, 122)
 	pointerArm.BorderSizePixel = 0
 	pointerArm.Parent = pointer
@@ -394,20 +394,20 @@ function QTEController:_createUI()
 
 	local progressLabel = Instance.new("TextLabel")
 	progressLabel.Name = "ProgressLabel"
-	progressLabel.Position = UDim2.new(1, -74, 0, 60)
-	progressLabel.Size = UDim2.new(0, 60, 0, 18)
+	progressLabel.Position = UDim2.new(0, 96, 0, 54)
+	progressLabel.Size = UDim2.new(1, -110, 0, 14)
 	progressLabel.BackgroundTransparency = 1
 	progressLabel.Font = Enum.Font.GothamBold
 	progressLabel.TextColor3 = Color3.fromRGB(242, 212, 103)
-	progressLabel.TextSize = 13
-	progressLabel.TextXAlignment = Enum.TextXAlignment.Right
+	progressLabel.TextSize = 12
+	progressLabel.TextXAlignment = Enum.TextXAlignment.Left
 	progressLabel.Text = "0%"
 	progressLabel.Parent = container
 
 	local barBackground = Instance.new("Frame")
 	barBackground.Name = "BarBackground"
-	barBackground.Position = UDim2.new(0, 104, 0, 66)
-	barBackground.Size = UDim2.new(1, -118, 0, 12)
+	barBackground.Position = UDim2.new(0, 96, 0, 70)
+	barBackground.Size = UDim2.new(1, -110, 0, 10)
 	barBackground.BackgroundColor3 = Color3.fromRGB(48, 51, 60)
 	barBackground.BorderSizePixel = 0
 	barBackground.Parent = container

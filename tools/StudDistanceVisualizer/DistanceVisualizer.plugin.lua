@@ -1,3 +1,9 @@
+local RunService = game:GetService("RunService")
+
+if not RunService:IsStudio() then
+	return
+end
+
 local Selection = game:GetService("Selection")
 local ChangeHistoryService = game:GetService("ChangeHistoryService")
 local CoreGui = game:GetService("CoreGui")
@@ -32,6 +38,11 @@ local radius = DEFAULT_RADIUS
 local shapeMode = "Sphere"
 local adornments = {}
 local connections = {}
+
+local function canUsePlugin()
+	return RunService:IsStudio() and not RunService:IsRunning()
+end
+
 
 local function disconnectAll()
 	for _, connection in ipairs(connections) do
@@ -142,6 +153,7 @@ local function refreshAdornments()
 end
 
 local function setEnabled(isEnabled)
+	canUsePlugin()
 	widget.Enabled = isEnabled
 	toggleButton:SetActive(isEnabled)
 	refreshAdornments()
@@ -339,4 +351,4 @@ toggleButton.Click:Connect(function()
 	setEnabled(not widget.Enabled)
 end)
 
-setEnabled(true)
+setEnabled(false)

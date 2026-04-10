@@ -50,9 +50,13 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.TerrorRadius = perception.TerrorRadius or stats.TerrorRadius or 80
 	self.DetectionRadius = perception.DetectionRadius or stats.DetectionRadius or 60
 	self.AttentionDuration = perception.AttentionDuration or stats.AttentionLevel or 2
+	self.ChaseLostSightGraceDuration = perception.ChaseLostSightGraceDuration or math.min(self.AttentionDuration, 0.3)
 	self.MemoryDuration = perception.MemoryDuration or (self.AttentionDuration + (navigation.ScoutLingerDuration or 1.25) + 2)
 	self.InvestigationSpeedMultiplier = perception.InvestigationSpeedMultiplier or 0.85
 	self.SearchDetectionRadiusMultiplier = perception.SearchDetectionRadiusMultiplier or 1
+	self.IgnoreLineOfSightForDetection = perception.IgnoreLineOfSightForDetection == true
+	self.IgnoreLineOfSightForInterest = perception.IgnoreLineOfSightForInterest == true
+	self.IgnoreLineOfSightForAttacks = perception.IgnoreLineOfSightForAttacks == true
 	self.TargetRetentionBonus = targeting.CurrentTargetBonus or 18
 	self.LineOfSightBonus = targeting.LineOfSightBonus or 25
 	self.MemoryBonus = targeting.MemoryBonus or 12
@@ -61,7 +65,12 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.PatrolRadius = navigation.PatrolRadius or 28
 	self.PatrolPointMinDistance = navigation.PatrolPointMinDistance or 8
 	self.PatrolPauseDuration = navigation.PatrolPauseDuration or 1.2
+	self.GlobalPatrolRelocateChance = navigation.GlobalPatrolRelocateChance or 0.3
+	self.RoamAnchorMaxDuration = navigation.RoamAnchorMaxDuration or 8
 	self.ScoutLingerDuration = navigation.ScoutLingerDuration or 1.25
+	self.ScoutPointRadius = navigation.ScoutPointRadius or math.max(6, self.PatrolPointMinDistance)
+	self.ScoutPointMinDistance = navigation.ScoutPointMinDistance or math.max(3, self.PatrolPointMinDistance * 0.5)
+	self.ScoutPointCount = navigation.ScoutPointCount or 2
 	self.SearchSpeedMultiplier = navigation.SearchSpeedMultiplier or 1.5
 	self.BasicAttack = actions.BasicAttack or {
 		Id = "BasicAttack",
@@ -87,10 +96,13 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.TargetPlayer = nil
 	self.TargetLastKnownPosition = nil
 	self.TargetLastSeenAt = nil
+	self.TargetLastVisibleAt = nil
 	self.TargetMemory = {}
 	self.PatrolDestination = nil
 	self.PatrolPauseUntil = 0
 	self.ScoutArrivalTime = nil
+	self.ScoutOrigin = nil
+	self.ScoutPointsRemaining = 0
 	self.SearchMode = nil
 	self.ConditionStates = {}
 	self.DownedPlayers = {}
@@ -109,6 +121,8 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	}
 	
 	self.SpawnCFrame = self.RootPart.CFrame
+	self.RoamAnchor = self:GetSpawnPosition()
+	self.RoamAnchorAssignedAt = os.clock()
 	
 	return self
 end
@@ -149,9 +163,13 @@ function BaseEntity:EnterState(stateName)
 
 	if stateName == ENTITY_STATE.Patrol then
 		self.ScoutArrivalTime = nil
+		self.ScoutOrigin = nil
+		self.ScoutPointsRemaining = 0
 	elseif stateName == ENTITY_STATE.Scout then
 		self.PatrolDestination = nil
 		self.PatrolPauseUntil = 0
+		self.ScoutOrigin = self.TargetLastKnownPosition
+		self.ScoutPointsRemaining = 0
 	elseif stateName == ENTITY_STATE.Chase then
 		self.ScoutArrivalTime = nil
 	end
@@ -343,6 +361,7 @@ function BaseEntity:SetTarget(player, lastKnownPosition, wasVisible)
 	elseif not player then
 		self.TargetLastKnownPosition = nil
 		self.TargetLastSeenAt = nil
+		self.TargetLastVisibleAt = nil
 	end
 end
 
@@ -356,6 +375,23 @@ end
 
 function BaseEntity:GetSpawnPosition()
 	return self.SpawnCFrame and self.SpawnCFrame.Position or self:GetPosition()
+end
+
+function BaseEntity:GetRoamAnchor()
+	return self.RoamAnchor or self:GetSpawnPosition()
+end
+
+function BaseEntity:SetRoamAnchor(position)
+	if not position then
+		return
+	end
+
+	self.RoamAnchor = position
+	self.RoamAnchorAssignedAt = os.clock()
+end
+
+function BaseEntity:ShouldRelocateRoamAnchor()
+	return (os.clock() - (self.RoamAnchorAssignedAt or 0)) >= self.RoamAnchorMaxDuration
 end
 
 function BaseEntity:RememberTarget(player, position, wasVisible)
@@ -373,6 +409,7 @@ function BaseEntity:RememberTarget(player, position, wasVisible)
 	self.TargetMemory[player] = {
 		LastKnownPosition = position,
 		LastSeenAt = timestamp,
+		LastVisibleAt = wasVisible == true and timestamp or (previousMemory and previousMemory.LastVisibleAt) or nil,
 		WasVisible = wasVisible == true,
 		AttentionExpiresAt = attentionExpiresAt,
 	}
@@ -380,6 +417,9 @@ function BaseEntity:RememberTarget(player, position, wasVisible)
 	if self.TargetPlayer == player then
 		self.TargetLastKnownPosition = position
 		self.TargetLastSeenAt = timestamp
+		if wasVisible == true then
+			self.TargetLastVisibleAt = timestamp
+		end
 	end
 end
 
@@ -432,6 +472,7 @@ function BaseEntity:SetTrackedTarget(player)
 	if memory then
 		self.TargetLastKnownPosition = memory.LastKnownPosition
 		self.TargetLastSeenAt = memory.LastSeenAt
+		self.TargetLastVisibleAt = memory.LastVisibleAt
 	end
 end
 
@@ -446,7 +487,18 @@ function BaseEntity:ForgetTarget(player)
 		self.TargetPlayer = nil
 		self.TargetLastKnownPosition = nil
 		self.TargetLastSeenAt = nil
+		self.TargetLastVisibleAt = nil
 	end
+end
+
+function BaseEntity:GetTimeSinceTargetWasVisible(player)
+	local memory = self:GetTargetMemory(player)
+	local lastVisibleAt = memory and memory.LastVisibleAt
+	if not lastVisibleAt then
+		return math.huge
+	end
+
+	return math.max(0, os.clock() - lastVisibleAt)
 end
 
 function BaseEntity:SetConditionActive(key, isActive)
@@ -488,12 +540,18 @@ function BaseEntity:GetPatrolDestination()
 	return self.PatrolDestination
 end
 
-function BaseEntity:SetPatrolDestination(position)
+function BaseEntity:GetPatrolDestinationReason()
+	return self.PatrolDestinationReason
+end
+
+function BaseEntity:SetPatrolDestination(position, reason)
 	self.PatrolDestination = position
+	self.PatrolDestinationReason = reason
 end
 
 function BaseEntity:ClearPatrolDestination()
 	self.PatrolDestination = nil
+	self.PatrolDestinationReason = nil
 end
 
 function BaseEntity:IsNearPosition(position, range)
@@ -535,8 +593,43 @@ function BaseEntity:HasFinishedScoutLinger()
 	return self.ScoutArrivalTime ~= nil and (os.clock() - self.ScoutArrivalTime) >= self.ScoutLingerDuration
 end
 
+function BaseEntity:BeginScoutSweep(origin)
+	self.ScoutOrigin = origin or self.TargetLastKnownPosition or self:GetPosition()
+	self.ScoutPointsRemaining = math.max(0, self.ScoutPointCount or 0)
+	self.ScoutArrivalTime = nil
+	self.PatrolDestination = nil
+end
+
+function BaseEntity:HasScoutSweepRemaining()
+	return (self.ScoutPointsRemaining or 0) > 0
+end
+
+function BaseEntity:PickScoutDestination()
+	local origin = self.ScoutOrigin or self.TargetLastKnownPosition or self:GetPosition()
+	if not origin then
+		return nil
+	end
+
+	for _ = 1, 8 do
+		local angle = self.Random:NextNumber(0, math.pi * 2)
+		local distance = self.Random:NextNumber(self.ScoutPointMinDistance, self.ScoutPointRadius)
+		local candidate = origin + Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
+		if not self:IsNearPosition(candidate, self.ScoutPointMinDistance * 0.75) then
+			self.PatrolDestination = candidate
+			self.PatrolDestinationReason = "Scout"
+			self.ScoutPointsRemaining = math.max(0, (self.ScoutPointsRemaining or 0) - 1)
+			return candidate
+		end
+	end
+
+	self.PatrolDestination = origin
+	self.PatrolDestinationReason = "Scout"
+	self.ScoutPointsRemaining = math.max(0, (self.ScoutPointsRemaining or 0) - 1)
+	return origin
+end
+
 function BaseEntity:PickPatrolDestination()
-	local origin = self:GetSpawnPosition()
+	local origin = self:GetRoamAnchor()
 	if not origin then
 		return nil
 	end
@@ -547,11 +640,13 @@ function BaseEntity:PickPatrolDestination()
 		local candidate = origin + Vector3.new(math.cos(angle) * distance, 0, math.sin(angle) * distance)
 		if not self:IsNearPosition(candidate, self.PatrolPointMinDistance * 0.75) then
 			self.PatrolDestination = candidate
+			self.PatrolDestinationReason = "Patrol"
 			return candidate
 		end
 	end
 
 	self.PatrolDestination = origin
+	self.PatrolDestinationReason = "Patrol"
 	return origin
 end
 
@@ -580,6 +675,14 @@ function BaseEntity:GetMoveSpeed()
 	end
 
 	return self.WalkSpeed * (1 + haste) * math.max(0, 1 - hinder)
+end
+
+function BaseEntity:GetSearchHeightOffset()
+	if not self.SearchMode then
+		return 0
+	end
+
+	return self.SearchMode.HeightOffset or 0
 end
 
 function BaseEntity:GetCurrentBasicAttackDefinition()
@@ -741,7 +844,8 @@ end
 
 function BaseEntity:GetDetectionRange()
 	if self.SearchMode then
-		return self.DetectionRadius * self.SearchDetectionRadiusMultiplier
+		local multiplier = self.SearchMode.DetectionRadiusMultiplier or self.SearchDetectionRadiusMultiplier
+		return self.DetectionRadius * multiplier
 	end
 
 	return self.DetectionRadius
@@ -776,6 +880,11 @@ function BaseEntity:MoveToward(position, deltaTime)
 	end
 	
 	local nextPosition = currentPosition + direction * moveStep
+
+	if self.SearchMode and self.SearchMode.HeightOffset then
+		nextPosition = Vector3.new(nextPosition.X, self.SearchMode.BaseY + self.SearchMode.HeightOffset, nextPosition.Z)
+		position = Vector3.new(position.X, self.SearchMode.BaseY + self.SearchMode.HeightOffset, position.Z)
+	end
 	
 	self.RootPart.CFrame = CFrame.new(nextPosition, position)
 end
@@ -794,10 +903,16 @@ function BaseEntity:ResetRuntimeState()
 	self.TargetPlayer = nil
 	self.TargetLastKnownPosition = nil
 	self.TargetLastSeenAt = nil
+	self.TargetLastVisibleAt = nil
 	self.TargetMemory = {}
 	self.PatrolDestination = nil
+	self.PatrolDestinationReason = nil
 	self.PatrolPauseUntil = 0
 	self.ScoutArrivalTime = nil
+	self.ScoutOrigin = nil
+	self.ScoutPointsRemaining = 0
+	self.RoamAnchor = self:GetSpawnPosition()
+	self.RoamAnchorAssignedAt = os.clock()
 	self.SearchMode = nil
 	self.ConditionStates = {}
 	self.DownedPlayers = {}
@@ -846,10 +961,15 @@ function BaseEntity:HasExpired()
 	return self.ExpiresAt ~= nil and os.clock() >= self.ExpiresAt
 end
 
-function BaseEntity:BeginSearchMode(searchId, duration)
+function BaseEntity:BeginSearchMode(searchId, duration, options)
+	options = options or {}
 	self.SearchMode = {
 		Id = searchId,
 		EndsAt = duration and (os.clock() + duration) or nil,
+		HeightOffset = options.HeightOffset,
+		BaseY = (self.RootPart and self.RootPart.Position.Y) or 0,
+		IgnoreMovementBlockers = options.IgnoreMovementBlockers == true,
+		DetectionRadiusMultiplier = options.DetectionRadiusMultiplier,
 	}
 end
 
@@ -876,6 +996,13 @@ function BaseEntity:EndSearchMode(searchId)
 
 	if searchId ~= nil and self.SearchMode.Id ~= searchId then
 		return
+	end
+
+	if self.RootPart and self.SearchMode.BaseY then
+		local currentPosition = self.RootPart.Position
+		local lookVector = self.RootPart.CFrame.LookVector
+		local groundedPosition = Vector3.new(currentPosition.X, self.SearchMode.BaseY, currentPosition.Z)
+		self.RootPart.CFrame = CFrame.new(groundedPosition, groundedPosition + Vector3.new(lookVector.X, 0, lookVector.Z))
 	end
 
 	self.SearchMode = nil

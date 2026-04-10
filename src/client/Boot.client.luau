@@ -16,10 +16,17 @@ local bootOrder = {
 	require(ControllersFolder.ActionDispatcher),
 	require(ControllersFolder.QTEController),
 	require(ControllersFolder.BreathHoldController),
+	require(ControllersFolder.CombatController),
+	require(ControllersFolder.StaminaController),
+	require(ControllersFolder.RemnantController),
+	require(ControllersFolder.AuraRevealController),
 	require(ControllersFolder.InputController),
 	require(ControllersFolder.InteractionController),
+	require(ControllersFolder.InteractableDebugController),
+	require(ControllersFolder.DevMenuController),
 	require(ControllersFolder.RoundController),
 	require(ControllersFolder.StatusEffectController),
+	require(ControllersFolder.EntityDebugController),
 	require(UIFolder.UIController),
 }
 

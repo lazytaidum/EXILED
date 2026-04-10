@@ -23,6 +23,10 @@ function ClientWorld:GetContextSnapshot()
 	return contextController and contextController:GetSnapshot() or {}
 end
 
+function ClientWorld:GetCharacter()
+	return self.Player.Character
+end
+
 function ClientWorld:GetRoundState()
 	local roundController = self.Controllers.RoundController
 	return roundController and roundController:GetState() or nil

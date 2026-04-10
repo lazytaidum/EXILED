@@ -14,7 +14,7 @@ local DefaultKeybinds = {
 		LeftAlt = { ActionToken.RadialMenu },
 
 		R = { ActionToken.Reload },
-		F = { ActionToken.Flashlight },
+		F = { ActionToken.Ability3 },
 
 		Q = { ActionToken.Ability1 },
 

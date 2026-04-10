@@ -17,11 +17,13 @@ function BaseCharacter.new(player, model, services)
 	self.IsInvincible = false
 	self.IsSprinting = false
 	self.IsCrouching = false
+	self.IsAiming = false
 	
 	self.SpeedMultipliers = {}
 	self.SpeedModifierToken = 0
 	self.SprintMultiplier = 1.45
 	self.CrouchMultiplier = 0.5
+	self.AimMultiplier = 0.82
 	self.CrouchHipHeightMultiplier = 0.6
 	
 	return self
@@ -93,11 +95,15 @@ function BaseCharacter:_refreshMovement()
 		self.Humanoid.HipHeight = self.DefaultHipHeight
 	end
 
+	if self.IsAiming then
+		movementMultiplier *= self.AimMultiplier
+	end
+
 	movementMultiplier *= (1 + self:_getStatusModifier("Haste"))
 	movementMultiplier *= math.max(0, 1 - self:_getStatusModifier("Hinder"))
 
 	self.Humanoid.WalkSpeed = self.DefaultWalkSpeed * movementMultiplier
-	self.Humanoid.AutoRotate = true
+	self.Humanoid.AutoRotate = not self.IsAiming
 end
 
 function BaseCharacter:SetWalkSpeed(speed)
@@ -262,6 +268,20 @@ function BaseCharacter:Heal(amount, options)
 end
 
 function BaseCharacter:RefreshFromStatusEffects()
+	self:_refreshMovement()
+end
+
+function BaseCharacter:SetAiming(state)
+	state = state == true
+	if self.IsAiming == state then
+		return
+	end
+
+	self.IsAiming = state
+	if state then
+		self.IsSprinting = false
+	end
+
 	self:_refreshMovement()
 end
 

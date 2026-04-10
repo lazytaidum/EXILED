@@ -56,6 +56,7 @@ function DevMenuController:Init()
 		TimeLeft = 0,
 		EscapeEnabled = true,
 		GodMode = false,
+		DebugUiEnabled = true,
 		Message = "",
 	}
 	self.PlacementRaycastParams = RaycastParams.new()
@@ -116,6 +117,20 @@ function DevMenuController:_toggleVisible()
 
 	if self.Visible then
 		self:_request("Refresh")
+	end
+end
+
+function DevMenuController:IsVisible()
+	return self.Visible == true
+end
+
+function DevMenuController:_applyDebugUiState()
+	local enabled = self.DevState.DebugUiEnabled ~= false
+	if self.EntityDebugController and self.EntityDebugController.SetDebugUiEnabled then
+		self.EntityDebugController:SetDebugUiEnabled(enabled)
+	end
+	if self.InteractableDebugController and self.InteractableDebugController.SetDebugUiEnabled then
+		self.InteractableDebugController:SetDebugUiEnabled(enabled)
 	end
 end
 
@@ -298,7 +313,7 @@ function DevMenuController:_createUI()
 	frame.Name = "Panel"
 	frame.AnchorPoint = Vector2.new(0, 0.5)
 	frame.Position = UDim2.new(0, 18, 0.5, 0)
-	frame.Size = UDim2.new(0, 280, 0, 420)
+	frame.Size = UDim2.new(0, 280, 0, 448)
 	frame.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
 	frame.BackgroundTransparency = 0.08
 	frame.BorderSizePixel = 0
@@ -484,6 +499,12 @@ function DevMenuController:_createUI()
 		})
 	end)
 	godButton.Name = "GodModeButton"
+	local debugUiButton = self:_createButton(frame, "Debug UI", UDim2.new(0, 12, 0, 418), UDim2.new(0, 256, 0, 20), function()
+		self:_request("ToggleDebugUi", {
+			Command = "ToggleDebugUi",
+		})
+	end)
+	debugUiButton.Name = "DebugUiButton"
 
 	launcher.MouseButton1Click:Connect(function()
 		self:_toggleVisible()
@@ -501,6 +522,7 @@ function DevMenuController:_createUI()
 		TimerBox = timerBox,
 		EscapeButton = escapeButton,
 		GodModeButton = godButton,
+		DebugUiButton = debugUiButton,
 	}
 end
 
@@ -529,6 +551,9 @@ function DevMenuController:_refreshUi()
 	self.UI.EscapeButton.BackgroundColor3 = self.DevState.EscapeEnabled and Color3.fromRGB(168, 57, 57) or Color3.fromRGB(58, 86, 68)
 	self.UI.GodModeButton.Text = (self.DevState.GodMode and "Disable God" or "Enable God")
 	self.UI.GodModeButton.BackgroundColor3 = self.DevState.GodMode and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
+	self.UI.DebugUiButton.Text = (self.DevState.DebugUiEnabled ~= false and "Disable Debug UI" or "Enable Debug UI")
+	self.UI.DebugUiButton.BackgroundColor3 = (self.DevState.DebugUiEnabled ~= false) and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
+	self:_applyDebugUiState()
 end
 
 return DevMenuController

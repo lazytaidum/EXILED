@@ -29,6 +29,20 @@ local WeaponDefinitions = {
 			},
 		},
 	},
+	Glock19G5 = {
+		Id = "Glock19G5",
+		DisplayName = "Glock 19 G5",
+		ShortDisplayName = "Glock",
+		Kind = "Firearm",
+		Damage = 8,
+		Range = 220,
+		AttackCooldown = 0.2,
+		ArcDotThreshold = 0.985,
+		HitRadius = 4,
+		MagazineSize = 12,
+		ReserveAmmo = 36,
+		ReloadDuration = 2.2,
+	},
 }
 
 return WeaponDefinitions

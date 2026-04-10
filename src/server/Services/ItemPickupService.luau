@@ -200,15 +200,15 @@ function ItemPickupService:CreateDevPickup(itemId, position, quantity)
 
 	local instance = Instance.new("Part")
 	instance.Name = itemId
-	instance.Size = Vector3.new(1.8, 1.8, 1.8)
+	instance.Size = Vector3.new(2, 2, 2)
 	instance.Shape = Enum.PartType.Ball
-	instance.CFrame = CFrame.new(position + Vector3.new(0, 0.9, 0))
+	instance.CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
 	instance.Anchored = true
 	instance.CanCollide = false
 	instance.CanQuery = false
 	instance.CanTouch = false
 	instance.Material = Enum.Material.Neon
-	instance.Color = Color3.fromRGB(110, 214, 255)
+	instance.Color = Color3.fromRGB(0, 143, 0)
 	instance:SetAttribute("ItemId", itemId)
 	instance:SetAttribute("DisplayName", "Pick Up " .. (ItemDefinitions[itemId].DisplayName or itemId))
 	instance:SetAttribute("Quantity", math.max(1, tonumber(quantity) or 1))

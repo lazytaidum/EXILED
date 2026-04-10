@@ -14,11 +14,19 @@ local function _createWeaponEntry(weaponId)
 		return nil
 	end
 
-	return {
+	local entry = {
 		EntryType = "Weapon",
 		ItemId = weaponId,
 		Durability = definition.Durability,
 	}
+
+	if definition.Kind == "Firearm" then
+		entry.CurrentAmmo = definition.MagazineSize or 0
+		entry.MaxAmmo = definition.MagazineSize or 0
+		entry.ReserveAmmo = definition.ReserveAmmo or 0
+	end
+
+	return entry
 end
 
 local function _createItemEntry(itemId, count)

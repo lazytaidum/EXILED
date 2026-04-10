@@ -32,6 +32,7 @@ function PlayerService:_onPlayerAdded(player)
 		IsLoaded = true,
 		IsSprinting = false,
 		IsCrouching = false,
+		IsAiming = false,
 	}
 	DebugLog:Log("Player", "[PlayerService] Added", player.Name)
 end

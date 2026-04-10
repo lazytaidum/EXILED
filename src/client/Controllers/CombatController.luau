@@ -1,6 +1,10 @@
 local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Debris = game:GetService("Debris")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local ActionName = require(ReplicatedStorage.Shared.Enums.ActionName)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
@@ -21,27 +25,39 @@ function CombatController:Init()
 	self.PlayerGui = self.World.PlayerGui
 	self.Remotes = self.World.Remotes
 	self.RequestPrimaryAttackRemote = self.Remotes:WaitForChild(RemoteNames.RequestPrimaryAttack)
+	self.RequestMovementStateRemote = self.Remotes:WaitForChild(RemoteNames.RequestMovementState)
+	self.RequestReloadRemote = self.Remotes:WaitForChild(RemoteNames.RequestReload)
 	self.RequestEquipWeaponRemote = self.Remotes:WaitForChild(RemoteNames.RequestEquipWeapon)
 	self.RequestUseInventoryItemRemote = self.Remotes:WaitForChild(RemoteNames.RequestUseInventoryItem)
 	self.CombatStateChangedRemote = self.Remotes:WaitForChild(RemoteNames.CombatStateChanged)
 	self.CombatHitConfirmedRemote = self.Remotes:WaitForChild(RemoteNames.CombatHitConfirmed)
+	self.CombatShotVisualRemote = self.Remotes:WaitForChild(RemoteNames.CombatShotVisual)
 	self.State = {
 		EquippedWeaponId = nil,
 		EquippedSlot = 1,
 		DisplayName = "Unarmed",
 		Durability = 0,
 		MaxDurability = 0,
+		CurrentAmmo = 0,
+		MaxAmmo = 0,
+		ReserveAmmo = 0,
+		WeaponKind = nil,
 		Cooldown = 0,
 		MaxCooldown = 0,
+		IsReloading = false,
+		ReloadRemaining = 0,
+		ReloadDuration = 0,
 		IsBroken = false,
 		Weapons = {},
 		IsUsingItem = false,
 		ItemUseDisplayName = nil,
 		ItemUseRemaining = 0,
 		ItemUseDuration = 0,
+		IsAiming = false,
 	}
 	self.LastHitAt = 0
 	self.LastHitTargetName = nil
+	self.LocalAimHeld = false
 end
 
 function CombatController:Start()
@@ -58,12 +74,24 @@ function CombatController:Start()
 		self:_refreshUi()
 	end)
 
+	self.CombatShotVisualRemote.OnClientEvent:Connect(function(payload)
+		self:_showShotVisual(payload)
+	end)
+
 	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		if gameProcessedEvent then
 			return
 		end
 
 		if UserInputService:GetFocusedTextBox() then
+			return
+		end
+
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			if self:_canAim() then
+				self.LocalAimHeld = true
+				self.RequestMovementStateRemote:FireServer(ActionName.Aim, true)
+			end
 			return
 		end
 
@@ -88,6 +116,8 @@ function CombatController:Start()
 				else
 					self.RequestEquipWeaponRemote:FireServer(requestedSlot)
 				end
+			elseif input.KeyCode == Enum.KeyCode.R then
+				self.RequestReloadRemote:FireServer()
 			end
 			return
 		end
@@ -108,13 +138,40 @@ function CombatController:Start()
 			return
 		end
 
-		self.RequestPrimaryAttackRemote:FireServer()
+		if self.State.WeaponKind == "Firearm" and not self.State.IsAiming then
+			return
+		end
+
+		self.RequestPrimaryAttackRemote:FireServer({
+			Direction = self.World.Camera.CFrame.LookVector,
+		})
+	end)
+
+	UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
+		if gameProcessedEvent and input.UserInputType ~= Enum.UserInputType.MouseButton2 then
+			return
+		end
+
+		if input.UserInputType == Enum.UserInputType.MouseButton2 then
+			self.LocalAimHeld = false
+			self.RequestMovementStateRemote:FireServer(ActionName.Aim, false)
+		end
+	end)
+
+	RunService:BindToRenderStep("CombatController.AimFacing", Enum.RenderPriority.Character.Value + 1, function()
+		self:_updateAimFacing()
 	end)
 
 	task.spawn(function()
 		while true do
 			if self.State.Cooldown and self.State.Cooldown > 0 then
 				self.State.Cooldown = math.max(0, self.State.Cooldown - 0.05)
+			end
+			if self.State.ReloadRemaining and self.State.ReloadRemaining > 0 then
+				self.State.ReloadRemaining = math.max(0, self.State.ReloadRemaining - 0.05)
+				if self.State.ReloadRemaining <= 0 then
+					self.State.IsReloading = false
+				end
 			end
 			if self.State.ItemUseRemaining and self.State.ItemUseRemaining > 0 then
 				self.State.ItemUseRemaining = math.max(0, self.State.ItemUseRemaining - 0.05)
@@ -129,6 +186,86 @@ function CombatController:Start()
 	DebugLog:Log("ClientCombat", "[CombatController] Started")
 end
 
+function CombatController:_showShotVisual(payload)
+	if type(payload) ~= "table" or typeof(payload.Origin) ~= "Vector3" or typeof(payload.EndPosition) ~= "Vector3" then
+		return
+	end
+
+	local origin = payload.Origin
+	local endPosition = payload.EndPosition
+	local direction = endPosition - origin
+	local distance = direction.Magnitude
+	if distance <= 0.05 then
+		return
+	end
+
+	local tracer = Instance.new("Part")
+	tracer.Name = "DebugShotTracer"
+	tracer.Anchored = true
+	tracer.CanCollide = false
+	tracer.CanQuery = false
+	tracer.CanTouch = false
+	tracer.CastShadow = false
+	tracer.Material = Enum.Material.Neon
+	tracer.Color = payload.Hit and Color3.fromRGB(124, 214, 166) or Color3.fromRGB(103, 194, 255)
+	tracer.Transparency = 0.02
+	tracer.Size = Vector3.new(0.22, 0.22, distance)
+	tracer.CFrame = CFrame.lookAt(origin, endPosition) * CFrame.new(0, 0, -(distance * 0.5))
+	tracer.Parent = Workspace
+
+	local impact = Instance.new("Part")
+	impact.Name = "DebugShotImpact"
+	impact.Anchored = true
+	impact.CanCollide = false
+	impact.CanQuery = false
+	impact.CanTouch = false
+	impact.CastShadow = false
+	impact.Material = Enum.Material.Neon
+	impact.Shape = Enum.PartType.Ball
+	impact.Color = tracer.Color
+	impact.Transparency = 0.08
+	impact.Size = Vector3.new(0.45, 0.45, 0.45)
+	impact.Position = endPosition
+	impact.Parent = Workspace
+
+	Debris:AddItem(tracer, 0.18)
+	Debris:AddItem(impact, 0.18)
+end
+
+function CombatController:_canAim()
+	return self.State.WeaponKind == "Firearm"
+		and not self.State.IsBroken
+		and not (self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0)
+		and not (self.QTEController and self.QTEController:IsActive())
+		and not (self.BreathHoldController and self.BreathHoldController:RequiresHoldInput())
+end
+
+function CombatController:_updateAimFacing()
+	if not self.State.IsAiming then
+		return
+	end
+
+	local character = self.World:GetCharacter()
+	if not character then
+		return
+	end
+
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not rootPart or not humanoid or humanoid.Health <= 0 then
+		return
+	end
+
+	local cameraLook = self.World.Camera.CFrame.LookVector
+	local flatLook = Vector3.new(cameraLook.X, 0, cameraLook.Z)
+	if flatLook.Magnitude <= 0.001 then
+		return
+	end
+
+	local position = rootPart.Position
+	rootPart.CFrame = CFrame.lookAt(position, position + flatLook.Unit)
+end
+
 function CombatController:_getRequestedSlotFromInput(input)
 	local keyCode = input.KeyCode
 	if keyCode == Enum.KeyCode.One then
@@ -137,6 +274,18 @@ function CombatController:_getRequestedSlotFromInput(input)
 		return 2
 	elseif keyCode == Enum.KeyCode.Three then
 		return 3
+	elseif keyCode == Enum.KeyCode.Four then
+		return 4
+	elseif keyCode == Enum.KeyCode.Five then
+		return 5
+	elseif keyCode == Enum.KeyCode.Six then
+		return 6
+	elseif keyCode == Enum.KeyCode.Seven then
+		return 7
+	elseif keyCode == Enum.KeyCode.Eight then
+		return 8
+	elseif keyCode == Enum.KeyCode.Nine then
+		return 9
 	end
 
 	return nil
@@ -274,6 +423,7 @@ function CombatController:_refreshSlots()
 		if not slotButton then
 			slotButton = Instance.new("Frame")
 			slotButton.Name = "Slot" .. tostring(index)
+			slotButton.LayoutOrder = index
 			slotButton.Size = UDim2.new(1, 0, 0, SLOT_HEIGHT)
 			slotButton.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
 			slotButton.BackgroundTransparency = 0.12
@@ -352,13 +502,23 @@ function CombatController:_refreshUi()
 	local maxDurability = math.max(0, self.State.MaxDurability or 0)
 	local durability = math.max(0, self.State.Durability or 0)
 	self.UI.NameLabel.Text = self.State.DisplayName or "Unarmed"
-	self.UI.DurabilityLabel.Text = string.format("Durability %d/%d", durability, maxDurability)
+	if self.State.WeaponKind == "Firearm" then
+		self.UI.DurabilityLabel.Text = string.format("Ammo %d/%d  |  Reserve %d", self.State.CurrentAmmo or 0, self.State.MaxAmmo or 0, self.State.ReserveAmmo or 0)
+	else
+		self.UI.DurabilityLabel.Text = string.format("Durability %d/%d", durability, maxDurability)
+	end
 
 	local statusText = "READY"
 	local statusColor = Color3.fromRGB(214, 180, 64)
 	local recentHit = (os.clock() - self.LastHitAt) <= 0.2
 	if self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0 then
 		statusText = "USE"
+		statusColor = Color3.fromRGB(103, 194, 255)
+	elseif self.State.IsReloading and (self.State.ReloadRemaining or 0) > 0 then
+		statusText = "RELOAD"
+		statusColor = Color3.fromRGB(103, 194, 255)
+	elseif self.State.IsAiming and self.State.WeaponKind == "Firearm" then
+		statusText = "AIM"
 		statusColor = Color3.fromRGB(103, 194, 255)
 	elseif self.State.IsBroken then
 		statusText = "BROKEN"
@@ -377,6 +537,8 @@ function CombatController:_refreshUi()
 	self.UI.StatusLabel.TextColor3 = statusColor
 	if self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0 then
 		self.UI.HitLabel.Text = string.format("Using %s", self.State.ItemUseDisplayName or "Item")
+	elseif self.State.IsReloading and (self.State.ReloadRemaining or 0) > 0 then
+		self.UI.HitLabel.Text = string.format("Reloading %.1fs", self.State.ReloadRemaining or 0)
 	else
 		self.UI.HitLabel.Text = recentHit and string.format("Hit %s", self.LastHitTargetName or "Entity") or ""
 	end
@@ -388,13 +550,22 @@ function CombatController:_refreshUi()
 	if self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0 then
 		maxProgressDuration = self.State.ItemUseDuration or 0
 		progressRemaining = self.State.ItemUseRemaining or 0
+	elseif self.State.IsReloading and (self.State.ReloadRemaining or 0) > 0 then
+		maxProgressDuration = self.State.ReloadDuration or 0
+		progressRemaining = self.State.ReloadRemaining or 0
 	end
 
 	local ratio = maxProgressDuration > 0 and math.clamp(1 - (progressRemaining / maxProgressDuration), 0, 1) or 1
 	self.UI.CooldownBar.Size = UDim2.new(ratio, 0, 1, 0)
-	self.UI.CooldownBar.BackgroundColor3 = self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0 and Color3.fromRGB(103, 194, 255)
-		or (recentHit and Color3.fromRGB(118, 208, 144) or (self.State.IsBroken and Color3.fromRGB(214, 94, 94) or Color3.fromRGB(214, 180, 64)))
+	self.UI.CooldownBar.BackgroundColor3 = ((self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0) or (self.State.IsReloading and (self.State.ReloadRemaining or 0) > 0)) and Color3.fromRGB(103, 194, 255)
+		or (recentHit and Color3.fromRGB(118, 208, 144) or ((self.State.IsAiming and self.State.WeaponKind == "Firearm") and Color3.fromRGB(103, 194, 255) or (self.State.IsBroken and Color3.fromRGB(214, 94, 94) or Color3.fromRGB(214, 180, 64))))
 	self.UI.Container.BackgroundColor3 = recentHit and Color3.fromRGB(28, 44, 33) or Color3.fromRGB(18, 19, 24)
+
+	if self.LocalAimHeld and not self:_canAim() then
+		self.LocalAimHeld = false
+		self.RequestMovementStateRemote:FireServer(ActionName.Aim, false)
+	end
+
 	self:_refreshSlots()
 end
 

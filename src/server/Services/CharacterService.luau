@@ -66,6 +66,7 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 		playerService:SetAlive(player, true)
 		playerService:SetMovementState(player, "IsSprinting", false)
 		playerService:SetMovementState(player, "IsCrouching", false)
+		playerService:SetMovementState(player, "IsAiming", false)
 	end
 
 	local roundManager = self.RoundManager
@@ -87,6 +88,7 @@ function CharacterService:_onCharacterAdded(player, characterModel)
 			livePlayerService:SetAlive(player, false)
 			livePlayerService:SetMovementState(player, "IsSprinting", false)
 			livePlayerService:SetMovementState(player, "IsCrouching", false)
+			livePlayerService:SetMovementState(player, "IsAiming", false)
 		end
 		
 		local liveRoundManager = self.RoundManager
@@ -134,6 +136,7 @@ function CharacterService:_removeCharacter(player, characterModel)
 		playerService:SetAlive(player, false)
 		playerService:SetMovementState(player, "IsSprinting", false)
 		playerService:SetMovementState(player, "IsCrouching", false)
+		playerService:SetMovementState(player, "IsAiming", false)
 	end
 
 	local statusEffectService = self.StatusEffectService

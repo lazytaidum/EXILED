@@ -29,6 +29,7 @@ end
 function DevService:Init(services)
 	self.Services = services
 	self.GodModeByPlayer = {}
+	self.DebugUiEnabledByPlayer = {}
 end
 
 function DevService:Start()
@@ -101,6 +102,8 @@ function DevService:_handleCommand(player, payload)
 		self:_placeItemPickup(player, payload.ItemId, payload.Position, payload.Quantity)
 	elseif command == "ToggleGodMode" then
 		self:_toggleGodMode(player)
+	elseif command == "ToggleDebugUi" then
+		self:_toggleDebugUi(player)
 	elseif command == "Refresh" then
 		self:_sendState(player)
 	end
@@ -118,6 +121,7 @@ function DevService:_giveWeapon(player, weaponId)
 		return
 	end
 
+	self.CombatService:RefreshCombatState(player)
 	self:_sendState(player, string.format("Gave %s", WeaponDefinitions[weaponId].DisplayName))
 end
 
@@ -288,6 +292,12 @@ function DevService:_toggleGodMode(player)
 	self:_sendState(player, nextState and "God mode enabled" or "God mode disabled")
 end
 
+function DevService:_toggleDebugUi(player)
+	local nextState = not (self.DebugUiEnabledByPlayer[player] ~= false)
+	self.DebugUiEnabledByPlayer[player] = nextState
+	self:_sendState(player, nextState and "Debug UI enabled" or "Debug UI disabled")
+end
+
 function DevService:_sendState(player, message)
 	if not self.StateRemote then
 		return
@@ -299,6 +309,7 @@ function DevService:_sendState(player, message)
 		TimeLeft = self.RoundManager and self.RoundManager.TimeLeft or 0,
 		EscapeEnabled = self.EscapeService and self.EscapeService:IsEscapeEnabled() or false,
 		GodMode = self.GodModeByPlayer[player] == true,
+		DebugUiEnabled = self.DebugUiEnabledByPlayer[player] ~= false,
 	})
 end
 

@@ -16,6 +16,7 @@ local bootOrder = {
 	require(ControllersFolder.ActionDispatcher),
 	require(ControllersFolder.QTEController),
 	require(ControllersFolder.BreathHoldController),
+	require(ControllersFolder.CameraInputController),
 	require(ControllersFolder.CombatController),
 	require(ControllersFolder.StaminaController),
 	require(ControllersFolder.RemnantController),

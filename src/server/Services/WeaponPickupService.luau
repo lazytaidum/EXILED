@@ -202,15 +202,15 @@ function WeaponPickupService:CreateDevPickup(weaponId, position)
 
 	local instance = Instance.new("Part")
 	instance.Name = weaponId
-	instance.Size = Vector3.new(2.4, 0.8, 2.4)
-	instance.Shape = Enum.PartType.Cylinder
-	instance.CFrame = CFrame.new(position + Vector3.new(0, 0.4, 0)) * CFrame.Angles(0, 0, math.rad(90))
+	instance.Size = Vector3.new(2, 2, 2)
+	instance.Shape = Enum.PartType.Ball
+	instance.CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
 	instance.Anchored = true
 	instance.CanCollide = false
 	instance.CanQuery = false
 	instance.CanTouch = false
 	instance.Material = Enum.Material.Neon
-	instance.Color = Color3.fromRGB(245, 217, 97)
+	instance.Color = Color3.fromRGB(0, 109, 163)
 	instance:SetAttribute("WeaponId", weaponId)
 	instance:SetAttribute("DisplayName", "Pick Up " .. (WeaponDefinitions[weaponId].DisplayName or weaponId))
 	instance:SetAttribute("PickupDuration", DEFAULT_PICKUP_DURATION)

@@ -6,6 +6,7 @@ local ActionName = {
 
 	Sprint = "Sprint",
 	Crouch = "Crouch",
+	Aim = "Aim",
 	Reload = "Reload",
 	Flashlight = "Flashlight",
 

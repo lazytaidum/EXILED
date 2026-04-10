@@ -20,6 +20,18 @@ function EntityDebugController:Init()
 	self.EntitiesFolder = Workspace:WaitForChild("Entities")
 	self.Overlays = {}
 	self.Player = self.World.Player
+	self.PlayerGui = self.World.PlayerGui
+	self.DebugUiEnabled = true
+end
+
+function EntityDebugController:SetDebugUiEnabled(enabled)
+	self.DebugUiEnabled = enabled ~= false
+
+	for _, overlay in pairs(self.Overlays) do
+		if overlay.Billboard then
+			overlay.Billboard.Enabled = self.DebugUiEnabled
+		end
+	end
 end
 
 function EntityDebugController:Start()
@@ -181,6 +193,7 @@ end
 
 function EntityDebugController:_refreshOverlays()
 	local now = Workspace:GetServerTimeNow()
+	local debugUiEnabled = self.DebugUiEnabled
 
 	for _, model in ipairs(self.EntitiesFolder:GetChildren()) do
 		if not self.Overlays[model] then
@@ -206,6 +219,7 @@ function EntityDebugController:_refreshOverlays()
 		local hitExpiresAt = model:GetAttribute("DebugRecentHitExpiresAt") or 0
 		local hitActive = hitDamage ~= nil and now <= hitExpiresAt
 
+		overlay.Billboard.Enabled = debugUiEnabled
 		overlay.NameLabel.Text = _clampText(name, 32)
 		overlay.StateLabel.Text = string.format("State: %s%s", _clampText(state, 12), target ~= "" and ("  Target: " .. _clampText(target, 14)) or "")
 		overlay.AbilityLabel.Text = string.format("Last: %s%s", _clampText(lastAbility, 18), absorbed > 0 and ("  Absorbed: " .. tostring(absorbed)) or "")

@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ActionName = require(ReplicatedStorage.Shared.Enums.ActionName)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local MovementService = {}
@@ -13,11 +14,14 @@ MovementService.Dependencies = {
 	"StatusEffectService",
 	"InteractionService",
 	"PlayerService",
+	"InventoryService",
+	"CombatService",
 }
 
 local MOVEMENT_STATE_KEYS = {
 	[ActionName.Sprint] = "IsSprinting",
 	[ActionName.Crouch] = "IsCrouching",
+	[ActionName.Aim] = "IsAiming",
 }
 
 function MovementService:Init(services)
@@ -38,7 +42,7 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		return
 	end
 
-	if actionName ~= ActionName.Sprint and actionName ~= ActionName.Crouch then
+	if actionName ~= ActionName.Sprint and actionName ~= ActionName.Crouch and actionName ~= ActionName.Aim then
 		return
 	end
 
@@ -63,9 +67,21 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		character:SetSprinting(isActive)
 		if isActive then
 			character:SetCrouching(false)
+			character:SetAiming(false)
+		end
+	elseif actionName == ActionName.Crouch then
+		character:SetCrouching(isActive)
+		if isActive then
+			character:SetSprinting(false)
 		end
 	else
-		character:SetCrouching(isActive)
+		local equippedEntry = self.InventoryService and self.InventoryService:GetEntry(player, (self.CombatService and self.CombatService.PlayerCombatStates[player] and self.CombatService.PlayerCombatStates[player].EquippedSlot) or 1)
+		local equippedDefinition = equippedEntry and equippedEntry.EntryType == "Weapon" and WeaponDefinitions[equippedEntry.ItemId] or nil
+		if isActive and (not equippedDefinition or equippedDefinition.Kind ~= "Firearm") then
+			return
+		end
+
+		character:SetAiming(isActive)
 		if isActive then
 			character:SetSprinting(false)
 		end
@@ -81,9 +97,19 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 		playerService:SetMovementState(player, stateKey, isActive)
 
 		if isActive then
-			local oppositeStateKey = actionName == ActionName.Sprint and MOVEMENT_STATE_KEYS[ActionName.Crouch] or MOVEMENT_STATE_KEYS[ActionName.Sprint]
-			playerService:SetMovementState(player, oppositeStateKey, false)
+			if actionName == ActionName.Sprint then
+				playerService:SetMovementState(player, MOVEMENT_STATE_KEYS[ActionName.Crouch], false)
+				playerService:SetMovementState(player, MOVEMENT_STATE_KEYS[ActionName.Aim], false)
+			elseif actionName == ActionName.Crouch then
+				playerService:SetMovementState(player, MOVEMENT_STATE_KEYS[ActionName.Sprint], false)
+			elseif actionName == ActionName.Aim then
+				playerService:SetMovementState(player, MOVEMENT_STATE_KEYS[ActionName.Sprint], false)
+			end
 		end
+	end
+
+	if self.CombatService then
+		self.CombatService:RefreshCombatState(player)
 	end
 
 	DebugLog:Log("Movement", string.format("[MovementService] %s set %s=%s", player.Name, actionName, tostring(isActive)))

@@ -61,12 +61,23 @@ end
 function InteractableDebugController:Init()
 	self.Player = self.World.Player
 	self.PlayerGui = self.World.PlayerGui
+	self.DebugUiEnabled = true
 	self.Folders = {
 		Objectives = Workspace:FindFirstChild("Objectives"),
 		WeaponPickups = Workspace:FindFirstChild("WeaponPickups"),
 		ItemPickups = Workspace:FindFirstChild("ItemPickups"),
 	}
 	self.Overlays = {}
+end
+
+function InteractableDebugController:SetDebugUiEnabled(enabled)
+	self.DebugUiEnabled = enabled ~= false
+
+	for _, overlay in pairs(self.Overlays) do
+		if overlay.Billboard then
+			overlay.Billboard.Enabled = self.DebugUiEnabled
+		end
+	end
 end
 
 function InteractableDebugController:Start()
@@ -78,6 +89,14 @@ function InteractableDebugController:Start()
 		if folder then
 			self:_trackFolder(folder)
 		end
+	end
+
+	if self.Player then
+		self.Player.CharacterAdded:Connect(function()
+			task.defer(function()
+				self:_rebuildOverlays()
+			end)
+		end)
 	end
 
 	task.spawn(function()
@@ -183,6 +202,20 @@ function InteractableDebugController:_untrackInstance(instance)
 	self.Overlays[instance] = nil
 end
 
+function InteractableDebugController:_rebuildOverlays()
+	for instance, _ in pairs(self.Overlays) do
+		self:_untrackInstance(instance)
+	end
+
+	for _, folder in pairs(self.Folders) do
+		if folder then
+			for _, instance in ipairs(folder:GetChildren()) do
+				self:_trackInstance(instance)
+			end
+		end
+	end
+end
+
 function InteractableDebugController:_describeInstance(instance)
 	if self.Folders.Objectives and instance.Parent == self.Folders.Objectives then
 		return _getObjectiveLabel(instance)
@@ -200,6 +233,7 @@ function InteractableDebugController:_describeInstance(instance)
 end
 
 function InteractableDebugController:_refreshOverlays()
+	local debugUiEnabled = self.DebugUiEnabled
 	local character = nil
 	if self.World and self.World.GetCharacter then
 		character = self.World:GetCharacter()
@@ -240,11 +274,11 @@ function InteractableDebugController:_refreshOverlays()
 
 		if playerPosition then
 			local distance = (adornee.Position - playerPosition).Magnitude
-			local visible = distance <= MAX_VISIBLE_DISTANCE
+			local visible = debugUiEnabled and distance <= MAX_VISIBLE_DISTANCE
 			overlay.Billboard.Enabled = visible
 			overlay.Frame.BackgroundTransparency = visible and 0.22 or 1
 		else
-			overlay.Billboard.Enabled = true
+			overlay.Billboard.Enabled = debugUiEnabled
 		end
 	end
 end

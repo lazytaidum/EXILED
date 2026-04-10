@@ -36,7 +36,7 @@ function StaminaController:_createUI()
 	local frame = Instance.new("Frame")
 	frame.Name = "Container"
 	frame.AnchorPoint = Vector2.new(0, 1)
-	frame.Position = UDim2.new(0, 18, 1, -90)
+	frame.Position = UDim2.new(0, 242, 1, -24)
 	frame.Size = UDim2.new(0, 180, 0, 30)
 	frame.BackgroundColor3 = Color3.fromRGB(22, 22, 28)
 	frame.BackgroundTransparency = 0.15

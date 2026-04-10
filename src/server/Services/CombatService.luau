@@ -1,6 +1,8 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local ItemDefinitions = require(ReplicatedStorage.Shared.Data.ItemDefinitions)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
@@ -14,6 +16,7 @@ CombatService.Dependencies = {
 	"EntityService",
 	"InventoryService",
 	"RoundManager",
+	"RoundHookService",
 	"StatusEffectService",
 }
 
@@ -24,10 +27,12 @@ end
 
 function CombatService:Start()
 	self.RequestPrimaryAttackRemote = self.RemoteRegistry:GetRemote(RemoteNames.RequestPrimaryAttack)
+	self.RequestReloadRemote = self.RemoteRegistry:GetRemote(RemoteNames.RequestReload)
 	self.RequestEquipWeaponRemote = self.RemoteRegistry:GetRemote(RemoteNames.RequestEquipWeapon)
 	self.RequestUseInventoryItemRemote = self.RemoteRegistry:GetRemote(RemoteNames.RequestUseInventoryItem)
 	self.CombatStateChangedRemote = self.RemoteRegistry:GetRemote(RemoteNames.CombatStateChanged)
 	self.CombatHitConfirmedRemote = self.RemoteRegistry:GetRemote(RemoteNames.CombatHitConfirmed)
+	self.CombatShotVisualRemote = self.RemoteRegistry:GetRemote(RemoteNames.CombatShotVisual)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		self:_initializePlayer(player)
@@ -41,9 +46,15 @@ function CombatService:Start()
 		self.PlayerCombatStates[player] = nil
 	end)
 
-	self.RequestPrimaryAttackRemote.OnServerEvent:Connect(function(player)
-		self:HandlePrimaryAttack(player)
+	self.RequestPrimaryAttackRemote.OnServerEvent:Connect(function(player, attackData)
+		self:HandlePrimaryAttack(player, attackData)
 	end)
+
+	if self.RequestReloadRemote then
+		self.RequestReloadRemote.OnServerEvent:Connect(function(player)
+			self:HandleReload(player)
+		end)
+	end
 
 	if self.RequestEquipWeaponRemote then
 		self.RequestEquipWeaponRemote.OnServerEvent:Connect(function(player, requestedSlot)
@@ -55,6 +66,17 @@ function CombatService:Start()
 		self.RequestUseInventoryItemRemote.OnServerEvent:Connect(function(player, requestedSlot)
 			self:HandleUseInventoryItem(player, requestedSlot)
 		end)
+	end
+
+	if self.RoundHookService then
+		self.RoundHookService:RegisterHook({
+			Id = "CombatService.ResetOnLobby",
+			Trigger = "PhaseChanged",
+			Phase = GamePhase.Lobby,
+			Callback = function()
+				self:_resetAllPlayerCombatForRound()
+			end,
+		})
 	end
 
 	DebugLog:Log("Combat", "[CombatService] Started")
@@ -69,14 +91,30 @@ function CombatService:_initializePlayer(player)
 end
 
 function CombatService:_resetPlayerCombatState(player)
+	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
+	if character then
+		character:SetAiming(false)
+	end
+
 	self.PlayerCombatStates[player] = {
 		EquippedSlot = 1,
 		LastAttackAt = 0,
 		ActiveItemUse = nil,
 		ItemUseToken = 0,
+		ReloadToken = 0,
+		ActiveReload = nil,
 	}
 
 	self:_syncCombatState(player)
+end
+
+function CombatService:_resetAllPlayerCombatForRound()
+	for _, player in ipairs(Players:GetPlayers()) do
+		if self.InventoryService then
+			self.InventoryService:ResetPlayerInventory(player)
+		end
+		self:_resetPlayerCombatState(player)
+	end
 end
 
 function CombatService:GetEquippedWeaponState(player)
@@ -91,11 +129,21 @@ end
 function CombatService:GiveWeapon(player, weaponId)
 	local slotIndex = self.InventoryService:AddWeapon(player, weaponId)
 	self:_syncCombatState(player)
+	task.defer(function()
+		if self.PlayerCombatStates[player] then
+			self:_syncCombatState(player)
+		end
+	end)
 	return slotIndex
 end
 
 function CombatService:RefreshCombatState(player)
 	self:_syncCombatState(player)
+	task.defer(function()
+		if self.PlayerCombatStates[player] then
+			self:_syncCombatState(player)
+		end
+	end)
 end
 
 function CombatService:HandleEquipWeapon(player, requestedSlot)
@@ -108,6 +156,11 @@ function CombatService:HandleEquipWeapon(player, requestedSlot)
 		return false
 	end
 
+	if combatState.ActiveReload then
+		combatState.ReloadToken += 1
+		combatState.ActiveReload = nil
+	end
+
 	local slotIndex = tonumber(requestedSlot)
 	if not slotIndex then
 		return false
@@ -116,6 +169,12 @@ function CombatService:HandleEquipWeapon(player, requestedSlot)
 	local weaponState = self.InventoryService:GetEntry(player, slotIndex)
 	if not weaponState then
 		return false
+	end
+
+	local character = self.CharacterService:GetCharacterByPlayer(player)
+	local definition = weaponState.EntryType == "Weapon" and WeaponDefinitions[weaponState.ItemId] or ItemDefinitions[weaponState.ItemId]
+	if character and (weaponState.EntryType ~= "Weapon" or (definition and definition.Kind ~= "Firearm")) then
+		character:SetAiming(false)
 	end
 
 	combatState.EquippedSlot = slotIndex
@@ -130,6 +189,10 @@ function CombatService:HandleUseInventoryItem(player, requestedSlot)
 	end
 
 	if combatState.ActiveItemUse then
+		return false
+	end
+
+	if combatState.ActiveReload then
 		return false
 	end
 
@@ -167,6 +230,7 @@ function CombatService:HandleUseInventoryItem(player, requestedSlot)
 		return self:_completeInventoryItemUse(player, slotIndex, entry, itemDefinition, character)
 	end
 
+	character:SetAiming(false)
 	combatState.ItemUseToken += 1
 	local useToken = combatState.ItemUseToken
 	combatState.ActiveItemUse = {
@@ -263,13 +327,13 @@ function CombatService:_completeInventoryItemUse(player, slotIndex, entry, itemD
 	return true
 end
 
-function CombatService:HandlePrimaryAttack(player)
+function CombatService:HandlePrimaryAttack(player, attackData)
 	local combatState = self.PlayerCombatStates[player]
 	if not combatState then
 		return false
 	end
 
-	if combatState.ActiveItemUse then
+	if combatState.ActiveItemUse or combatState.ActiveReload then
 		return false
 	end
 
@@ -285,7 +349,12 @@ function CombatService:HandlePrimaryAttack(player)
 
 	local equippedWeaponState = self:_getEquippedWeaponState(player, combatState)
 	local weapon = equippedWeaponState and equippedWeaponState.EntryType == "Weapon" and WeaponDefinitions[equippedWeaponState.ItemId] or nil
-	if not weapon or not equippedWeaponState or equippedWeaponState.Durability <= 0 then
+	if not weapon or not equippedWeaponState or (weapon.Kind == "Melee" and equippedWeaponState.Durability <= 0) then
+		self:_syncCombatState(player)
+		return false
+	end
+
+	if weapon.Kind == "Firearm" and not character.IsAiming then
 		self:_syncCombatState(player)
 		return false
 	end
@@ -296,9 +365,33 @@ function CombatService:HandlePrimaryAttack(player)
 	end
 
 	combatState.LastAttackAt = now
-	equippedWeaponState.Durability = math.max(0, equippedWeaponState.Durability - (weapon.DurabilityCostPerSwing or 1))
 
-	local hitEntity = self:_findAttackTarget(character, weapon)
+	if weapon.Kind == "Firearm" then
+		if (equippedWeaponState.CurrentAmmo or 0) <= 0 then
+			self:_syncCombatState(player)
+			return false
+		end
+
+		equippedWeaponState.CurrentAmmo = math.max(0, (equippedWeaponState.CurrentAmmo or 0) - 1)
+	else
+		equippedWeaponState.Durability = math.max(0, equippedWeaponState.Durability - (weapon.DurabilityCostPerSwing or 1))
+	end
+
+	local hitEntity = nil
+	local shotEndPosition = nil
+	local shotOrigin = nil
+	if weapon.Kind == "Firearm" then
+		hitEntity, shotEndPosition, shotOrigin = self:_findRangedAttackTarget(character, weapon, attackData)
+	else
+		hitEntity = self:_findAttackTarget(character, weapon)
+	end
+	if weapon.Kind == "Firearm" and self.CombatShotVisualRemote and shotEndPosition then
+		self.CombatShotVisualRemote:FireClient(player, {
+			Origin = shotOrigin or (character.RootPart.Position + Vector3.new(0, 1.5, 0)),
+			EndPosition = shotEndPosition,
+			Hit = hitEntity ~= nil,
+		})
+	end
 	if hitEntity then
 		local didDamage = self.EntityService:DamageEntity(hitEntity, weapon.Damage, {
 			SourcePlayer = player,
@@ -319,6 +412,79 @@ function CombatService:HandlePrimaryAttack(player)
 	end
 
 	self:_syncCombatState(player)
+	return true
+end
+
+function CombatService:HandleReload(player)
+	local combatState = self.PlayerCombatStates[player]
+	if not combatState or combatState.ActiveItemUse or combatState.ActiveReload then
+		return false
+	end
+
+	local roundManager = self.RoundManager
+	if roundManager and not roundManager:IsReceptionActive() then
+		return false
+	end
+
+	local character = self.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character:IsAlive() then
+		return false
+	end
+
+	local equippedWeaponState = self:_getEquippedWeaponState(player, combatState)
+	local weapon = equippedWeaponState and equippedWeaponState.EntryType == "Weapon" and WeaponDefinitions[equippedWeaponState.ItemId] or nil
+	if not weapon or weapon.Kind ~= "Firearm" then
+		return false
+	end
+
+	local currentAmmo = equippedWeaponState.CurrentAmmo or 0
+	local maxAmmo = equippedWeaponState.MaxAmmo or weapon.MagazineSize or 0
+	local reserveAmmo = equippedWeaponState.ReserveAmmo or 0
+	if currentAmmo >= maxAmmo or reserveAmmo <= 0 then
+		return false
+	end
+
+	combatState.ReloadToken += 1
+	local reloadToken = combatState.ReloadToken
+	local reloadDuration = weapon.ReloadDuration or 0
+	character:SetAiming(false)
+	combatState.ActiveReload = {
+		EndsAt = os.clock() + reloadDuration,
+	}
+	self:_syncCombatState(player)
+
+	task.delay(reloadDuration, function()
+		local liveState = self.PlayerCombatStates[player]
+		if not liveState or liveState.ReloadToken ~= reloadToken then
+			return
+		end
+
+		local liveWeaponState = self:_getEquippedWeaponState(player, liveState)
+		local liveWeapon = liveWeaponState and liveWeaponState.EntryType == "Weapon" and WeaponDefinitions[liveWeaponState.ItemId] or nil
+		if not liveWeapon or liveWeapon.Kind ~= "Firearm" then
+			liveState.ActiveReload = nil
+			self:_syncCombatState(player)
+			return
+		end
+
+		local liveCharacter = self.CharacterService:GetCharacterByPlayer(player)
+		if not liveCharacter or not liveCharacter:IsAlive() then
+			liveState.ActiveReload = nil
+			self:_syncCombatState(player)
+			return
+		end
+
+		local magazineSize = liveWeaponState.MaxAmmo or liveWeapon.MagazineSize or 0
+		local current = liveWeaponState.CurrentAmmo or 0
+		local reserve = liveWeaponState.ReserveAmmo or 0
+		local needed = math.max(0, magazineSize - current)
+		local loaded = math.min(needed, reserve)
+		liveWeaponState.CurrentAmmo = current + loaded
+		liveWeaponState.ReserveAmmo = reserve - loaded
+		liveState.ActiveReload = nil
+		self:_syncCombatState(player)
+	end)
+
 	return true
 end
 
@@ -359,6 +525,43 @@ function CombatService:_findAttackTarget(character, weapon)
 	return bestEntity
 end
 
+function CombatService:_findRangedAttackTarget(character, weapon, attackData)
+	local rootPart = character.RootPart
+	local origin = rootPart.Position + Vector3.new(0, 1.5, 0)
+	local lookVector = rootPart.CFrame.LookVector
+	if type(attackData) == "table" and typeof(attackData.Direction) == "Vector3" then
+		local requestedDirection = attackData.Direction
+		if requestedDirection.Magnitude > 0.001 then
+			local normalizedDirection = requestedDirection.Unit
+			if lookVector:Dot(normalizedDirection) >= 0.25 then
+				lookVector = normalizedDirection
+			end
+		end
+	end
+	local muzzleOrigin = origin + (lookVector * 2.15) + (rootPart.CFrame.RightVector * 0.7) + Vector3.new(0, 0.55, 0)
+	origin = muzzleOrigin
+	local shotEndPosition = origin + (lookVector * (weapon.Range or 0))
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	local filter = { character.Model }
+	local mapBounds = Workspace:FindFirstChild("MapBounds")
+	if mapBounds then
+		table.insert(filter, mapBounds)
+	end
+	raycastParams.FilterDescendantsInstances = filter
+	local result = Workspace:Raycast(origin, lookVector * (weapon.Range or 0), raycastParams)
+	if result then
+		shotEndPosition = result.Position
+		for _, entity in ipairs(self.EntityService.Entities or {}) do
+			if entity.IsActive and entity.Health > 0 and entity.Model and result.Instance:IsDescendantOf(entity.Model) then
+				return entity, shotEndPosition, origin
+			end
+		end
+	end
+
+	return nil, shotEndPosition, origin
+end
+
 function CombatService:_syncCombatState(player)
 	if not self.CombatStateChangedRemote then
 		return
@@ -371,10 +574,12 @@ function CombatService:_syncCombatState(player)
 
 	local equippedWeaponState = self:_getEquippedWeaponState(player, combatState)
 	local weapon = equippedWeaponState and equippedWeaponState.EntryType == "Weapon" and WeaponDefinitions[equippedWeaponState.ItemId] or nil
+	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
 	local cooldownRemaining = 0
 	if weapon then
 		cooldownRemaining = math.max(0, (combatState.LastAttackAt + (weapon.AttackCooldown or 0)) - os.clock())
 	end
+	local reloadRemaining = combatState.ActiveReload and math.max(0, combatState.ActiveReload.EndsAt - os.clock()) or 0
 	local itemUseRemaining = combatState.ActiveItemUse and math.max(0, combatState.ActiveItemUse.EndsAt - os.clock()) or 0
 	local activeItemUseDefinition = combatState.ActiveItemUse and ItemDefinitions[combatState.ActiveItemUse.ItemId] or nil
 
@@ -382,6 +587,9 @@ function CombatService:_syncCombatState(player)
 	for slotIndex, weaponState in ipairs(self.InventoryService:GetEntries(player) or {}) do
 		local definition = weaponState.EntryType == "Weapon" and WeaponDefinitions[weaponState.ItemId] or ItemDefinitions[weaponState.ItemId]
 		if definition then
+			local isBroken = weaponState.EntryType == "Weapon"
+				and definition.Kind == "Melee"
+				and (weaponState.Durability or 0) <= 0
 			table.insert(payloadWeapons, {
 				Slot = slotIndex,
 				WeaponId = weaponState.ItemId,
@@ -390,11 +598,19 @@ function CombatService:_syncCombatState(player)
 				EntryType = weaponState.EntryType,
 				Durability = weaponState.Durability,
 				MaxDurability = definition.Durability,
+				CurrentAmmo = weaponState.CurrentAmmo,
+				MaxAmmo = weaponState.MaxAmmo,
+				ReserveAmmo = weaponState.ReserveAmmo,
 				Count = weaponState.Count,
-				IsBroken = weaponState.EntryType == "Weapon" and weaponState.Durability <= 0 or false,
+				IsBroken = isBroken,
 			})
 		end
 	end
+
+	local isBroken = weapon ~= nil
+		and weapon.Kind == "Melee"
+		and equippedWeaponState ~= nil
+		and (equippedWeaponState.Durability or 0) <= 0
 
 	self.CombatStateChangedRemote:FireClient(player, {
 		EquippedWeaponId = equippedWeaponState and equippedWeaponState.ItemId or nil,
@@ -402,14 +618,22 @@ function CombatService:_syncCombatState(player)
 		DisplayName = weapon and weapon.DisplayName or (equippedWeaponState and ItemDefinitions[equippedWeaponState.ItemId] and ItemDefinitions[equippedWeaponState.ItemId].DisplayName or (equippedWeaponState and equippedWeaponState.ItemId or "Unarmed")),
 		Durability = weapon and equippedWeaponState and equippedWeaponState.Durability or 0,
 		MaxDurability = weapon and weapon.Durability or 0,
+		CurrentAmmo = equippedWeaponState and equippedWeaponState.CurrentAmmo or 0,
+		MaxAmmo = equippedWeaponState and equippedWeaponState.MaxAmmo or 0,
+		ReserveAmmo = equippedWeaponState and equippedWeaponState.ReserveAmmo or 0,
+		WeaponKind = weapon and weapon.Kind or nil,
 		Cooldown = cooldownRemaining,
 		MaxCooldown = weapon and weapon.AttackCooldown or 0,
+		IsReloading = combatState.ActiveReload ~= nil,
+		ReloadRemaining = reloadRemaining,
+		ReloadDuration = weapon and weapon.ReloadDuration or 0,
 		IsUsingItem = combatState.ActiveItemUse ~= nil,
 		ItemUseItemId = combatState.ActiveItemUse and combatState.ActiveItemUse.ItemId or nil,
 		ItemUseDisplayName = activeItemUseDefinition and activeItemUseDefinition.DisplayName or nil,
 		ItemUseRemaining = itemUseRemaining,
 		ItemUseDuration = activeItemUseDefinition and activeItemUseDefinition.UseDuration or 0,
-		IsBroken = weapon ~= nil and equippedWeaponState ~= nil and equippedWeaponState.Durability <= 0 or false,
+		IsBroken = isBroken,
+		IsAiming = character and character.IsAiming or false,
 		Weapons = payloadWeapons,
 	})
 end

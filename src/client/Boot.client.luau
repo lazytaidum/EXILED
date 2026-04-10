@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local StarterGui = game:GetService("StarterGui")
 local player = Players.LocalPlayer
 local playerScripts = player:WaitForChild("PlayerScripts")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -18,8 +19,10 @@ local bootOrder = {
 	require(ControllersFolder.BreathHoldController),
 	require(ControllersFolder.CameraInputController),
 	require(ControllersFolder.CombatController),
+	require(ControllersFolder.CrosshairController),
 	require(ControllersFolder.StaminaController),
 	require(ControllersFolder.RemnantController),
+	require(ControllersFolder.NotificationController),
 	require(ControllersFolder.AuraRevealController),
 	require(ControllersFolder.InputController),
 	require(ControllersFolder.InteractionController),
@@ -36,6 +39,19 @@ RingWrapper.Attach(bootOrder, Controllers, "Controllers")
 
 local World = ClientWorld.new(Controllers)
 RingWrapper.AttachField(bootOrder, "World", World)
+
+for _, coreGuiType in ipairs({
+	Enum.CoreGuiType.Backpack,
+	Enum.CoreGuiType.Chat,
+	Enum.CoreGuiType.Health,
+	Enum.CoreGuiType.PlayerList,
+	Enum.CoreGuiType.EmotesMenu,
+	Enum.CoreGuiType.SelfView,
+}) do
+	pcall(function()
+		StarterGui:SetCoreGuiEnabled(coreGuiType, false)
+	end)
+end
 
 for _, controller in ipairs(bootOrder) do
 	if controller.Init then

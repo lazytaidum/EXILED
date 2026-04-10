@@ -143,6 +143,7 @@ function CombatController:Start()
 		end
 
 		self.RequestPrimaryAttackRemote:FireServer({
+			Origin = self.World.Camera.CFrame.Position,
 			Direction = self.World.Camera.CFrame.LookVector,
 		})
 	end)
@@ -184,6 +185,15 @@ function CombatController:Start()
 	end)
 
 	DebugLog:Log("ClientCombat", "[CombatController] Started")
+end
+
+function CombatController:_releaseAim()
+	if not self.LocalAimHeld and not self.State.IsAiming then
+		return
+	end
+
+	self.LocalAimHeld = false
+	self.RequestMovementStateRemote:FireServer(ActionName.Aim, false)
 end
 
 function CombatController:_showShotVisual(payload)
@@ -238,6 +248,14 @@ function CombatController:_canAim()
 		and not (self.State.IsUsingItem and (self.State.ItemUseRemaining or 0) > 0)
 		and not (self.QTEController and self.QTEController:IsActive())
 		and not (self.BreathHoldController and self.BreathHoldController:RequiresHoldInput())
+end
+
+function CombatController:GetState()
+	return self.State
+end
+
+function CombatController:IsRecentHit()
+	return (os.clock() - (self.LastHitAt or 0)) <= 0.2
 end
 
 function CombatController:_updateAimFacing()
@@ -562,8 +580,11 @@ function CombatController:_refreshUi()
 	self.UI.Container.BackgroundColor3 = recentHit and Color3.fromRGB(28, 44, 33) or Color3.fromRGB(18, 19, 24)
 
 	if self.LocalAimHeld and not self:_canAim() then
-		self.LocalAimHeld = false
-		self.RequestMovementStateRemote:FireServer(ActionName.Aim, false)
+		self:_releaseAim()
+	end
+
+	if self.LocalAimHeld and ((self.QTEController and self.QTEController:IsActive()) or (self.BreathHoldController and self.BreathHoldController:RequiresHoldInput())) then
+		self:_releaseAim()
 	end
 
 	self:_refreshSlots()

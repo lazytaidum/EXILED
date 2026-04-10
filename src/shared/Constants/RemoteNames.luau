@@ -20,6 +20,7 @@ local RemoteNames = {
 	CombatHitConfirmed = "CombatHitConfirmed",
 	CombatShotVisual = "CombatShotVisual",
 	StaminaStateChanged = "StaminaStateChanged",
+	UiToastRequested = "UiToastRequested",
 	RequestRemnantAbility = "RequestRemnantAbility",
 	RemnantStateChanged = "RemnantStateChanged",
 	AuraRevealStateChanged = "AuraRevealStateChanged",

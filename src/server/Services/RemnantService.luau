@@ -16,6 +16,7 @@ RemnantService.Dependencies = {
 	"WeaponPickupService",
 	"ItemPickupService",
 	"EntityService",
+	"CombatService",
 }
 
 function RemnantService:Init(services)
@@ -31,10 +32,99 @@ function RemnantService:Init(services)
 	end
 end
 
+function RemnantService:_createTemporaryPart(properties, duration)
+	local part = Instance.new("Part")
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = properties.Material or Enum.Material.Neon
+	part.Color = properties.Color or Color3.fromRGB(115, 208, 255)
+	part.Transparency = properties.Transparency or 0.2
+	part.Size = properties.Size or Vector3.new(1, 1, 1)
+	part.Shape = properties.Shape or Enum.PartType.Ball
+	part.CFrame = properties.CFrame or CFrame.new()
+	part.Name = properties.Name or "RemnantVisual"
+	part.Parent = self.DevicesFolder
+
+	task.delay(duration or 0.2, function()
+		if part.Parent then
+			part:Destroy()
+		end
+	end)
+
+	return part
+end
+
+function RemnantService:_spawnPulseRing(position, color, startRadius, endRadius, duration, yOffset)
+	local ring = self:_createTemporaryPart({
+		Name = "PulseRing",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(0.08, startRadius * 2, startRadius * 2),
+		CFrame = CFrame.new(position + Vector3.new(0, yOffset or 0, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = color,
+		Material = Enum.Material.ForceField,
+		Transparency = 0.18,
+	}, duration)
+
+	local startedAt = os.clock()
+	task.spawn(function()
+		while ring.Parent do
+			local alpha = math.clamp((os.clock() - startedAt) / duration, 0, 1)
+			local radius = startRadius + ((endRadius - startRadius) * alpha)
+			ring.Size = Vector3.new(0.08, radius * 2, radius * 2)
+			ring.Transparency = 0.18 + (alpha * 0.72)
+			task.wait(0.03)
+		end
+	end)
+end
+
+function RemnantService:_spawnWatcherEyeVisual(character)
+	if not character or not character.RootPart then
+		return
+	end
+
+	local eyePosition = character.RootPart.Position + Vector3.new(0, 4.3, 0)
+	self:_createTemporaryPart({
+		Name = "WatchersEye",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(1.1, 1.1, 1.1),
+		CFrame = CFrame.new(eyePosition),
+		Color = Color3.fromRGB(115, 208, 255),
+		Transparency = 0.12,
+	}, 0.7)
+	self:_spawnPulseRing(character.RootPart.Position, Color3.fromRGB(115, 208, 255), 2, 22, 0.55, -2.8)
+end
+
+function RemnantService:_spawnWatchtowerDeployVisual(position, radius)
+	self:_createTemporaryPart({
+		Name = "WatchtowerFlash",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(1.25, 1.25, 1.25),
+		CFrame = CFrame.new(position + Vector3.new(0, 0.7, 0)),
+		Color = Color3.fromRGB(140, 226, 255),
+		Transparency = 0.08,
+	}, 0.35)
+	self:_spawnPulseRing(position, Color3.fromRGB(90, 184, 255), 3, math.min(radius, 26), 0.45, -2.8)
+end
+
+function RemnantService:_spawnRefixtureShotFlash(position)
+	self:_createTemporaryPart({
+		Name = "RefixtureFlash",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(0.4, 0.4, 0.4),
+		CFrame = CFrame.new(position),
+		Color = Color3.fromRGB(180, 236, 255),
+		Transparency = 0.04,
+	}, 0.08)
+end
+
 function RemnantService:Start()
 	self.RequestAbilityRemote = self.RemoteRegistry:GetRemote(RemoteNames.RequestRemnantAbility)
 	self.RemnantStateRemote = self.RemoteRegistry:GetRemote(RemoteNames.RemnantStateChanged)
 	self.AuraRevealStateRemote = self.RemoteRegistry:GetRemote(RemoteNames.AuraRevealStateChanged)
+	self.UiToastRemote = self.RemoteRegistry:GetRemote(RemoteNames.UiToastRequested)
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		self:_initializePlayer(player)
@@ -165,6 +255,8 @@ function RemnantService:HandleAbilityRequest(player, abilitySlot)
 	local didUse = false
 	if abilityState.Id == "WatchersEye" then
 		didUse = self:_useWatchersEye(player, state)
+	elseif abilityState.Id == "Refixture" then
+		didUse = self:_useRefixture(player, state, character)
 	elseif abilityState.Id == "Watchtower" then
 		didUse = self:_useWatchtower(player, state, character)
 	end
@@ -175,6 +267,13 @@ function RemnantService:HandleAbilityRequest(player, abilitySlot)
 
 	abilityState.CooldownEndsAt = now + (abilityState.Cooldown or 0)
 	self:_pushState(player)
+	if self.UiToastRemote then
+		self.UiToastRemote:FireClient(player, {
+			Title = "Ability Used",
+			Message = abilityState.DisplayName or abilityState.Id,
+			Tint = "Ability",
+		})
+	end
 	DebugLog:Log("Remnant", string.format("[RemnantService] %s used %s", player.Name, abilityState.Id))
 	return true
 end
@@ -262,6 +361,11 @@ function RemnantService:_useWatchersEye(player, state)
 		return false
 	end
 
+	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
+	if character then
+		self:_spawnWatcherEyeVisual(character)
+	end
+
 	local now = os.clock()
 	local activeReveals = state.Reveals
 	for _, reveal in ipairs(reveals) do
@@ -283,6 +387,97 @@ function RemnantService:_useWatchersEye(player, state)
 	end
 
 	self:_pushRevealState(player)
+	return true
+end
+
+function RemnantService:_useRefixture(player, state, character)
+	local definition = RemnantDefinitions[state.RemnantId] or RemnantDefinitions.Baam
+	local abilityDefinition = definition.Abilities and definition.Abilities.Ability2
+	if not abilityDefinition or not character or not character.RootPart or not self.CombatService or not self.EntityService then
+		return false
+	end
+
+	local weaponDefinition = self.CombatService:GetEquippedWeaponDefinition(player)
+	if not weaponDefinition or weaponDefinition.Kind ~= "Firearm" then
+		return false
+	end
+
+	local origin = character.RootPart.Position + Vector3.new(0, 2.8, 0)
+	local nearestEntity = nil
+	local nearestDistance = math.huge
+	local maxRange = abilityDefinition.Range or 160
+
+	for _, entity in ipairs(self.EntityService.Entities or {}) do
+		if entity.IsActive and entity.Health > 0 and entity.Model then
+			local entityPosition = entity:GetPosition()
+			if entityPosition then
+				local distance = (entityPosition - origin).Magnitude
+				if distance <= maxRange and distance < nearestDistance then
+					nearestDistance = distance
+					nearestEntity = entity
+				end
+			end
+		end
+	end
+
+	if not nearestEntity then
+		return false
+	end
+
+	local shotCount = weaponDefinition.MagazineSize or 1
+	local shotInterval = abilityDefinition.ShotInterval or 0.06
+	local damagePerShot = math.max(1, math.floor((weaponDefinition.Damage or 0) * (abilityDefinition.DamageMultiplier or 0.5)))
+	local targetPosition = nearestEntity:GetPosition()
+	if not targetPosition then
+		return false
+	end
+
+	local hologram = Instance.new("Part")
+	hologram.Name = string.format("%sRefixture", player.Name)
+	hologram.Size = Vector3.new(0.5, 0.5, 1.4)
+	hologram.Anchored = true
+	hologram.CanCollide = false
+	hologram.CanQuery = false
+	hologram.CanTouch = false
+	hologram.CastShadow = false
+	hologram.Material = Enum.Material.Neon
+	hologram.Color = Color3.fromRGB(115, 208, 255)
+	hologram.Transparency = 0.18
+	hologram.CFrame = CFrame.lookAt(origin, targetPosition + Vector3.new(0, 2, 0))
+	hologram.Parent = self.DevicesFolder
+	task.delay((shotCount * shotInterval) + 0.2, function()
+		if hologram.Parent then
+			hologram:Destroy()
+		end
+	end)
+
+	for shotIndex = 1, shotCount do
+		task.delay((shotIndex - 1) * shotInterval, function()
+			if not character:IsAlive() then
+				return
+			end
+
+			if not nearestEntity.IsActive or nearestEntity.Health <= 0 then
+				return
+			end
+
+			local liveTargetPosition = nearestEntity:GetPosition()
+			if not liveTargetPosition then
+				return
+			end
+
+			local shotOrigin = origin
+			local shotEnd = liveTargetPosition + Vector3.new(0, 2, 0)
+			self:_spawnRefixtureShotFlash(shotOrigin)
+			self.CombatService:EmitShotVisual(player, shotOrigin, shotEnd, true)
+			self.EntityService:DamageEntity(nearestEntity, damagePerShot, {
+				SourcePlayer = player,
+				WeaponId = weaponDefinition.Id,
+				Source = "Refixture",
+			})
+		end)
+	end
+
 	return true
 end
 
@@ -352,6 +547,8 @@ function RemnantService:_useWatchtower(player, state, character)
 		Pulse = pulse,
 		InnerPulse = innerPulse,
 	}
+
+	self:_spawnWatchtowerDeployVisual(position, abilityDefinition.Radius or 300)
 
 	return true
 end

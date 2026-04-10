@@ -11,6 +11,7 @@ StatusEffectService.Name = "StatusEffectService"
 StatusEffectService.Dependencies = {
 	"RemoteRegistry",
 	"CharacterService",
+	"CombatService",
 }
 
 function StatusEffectService:Init(services)
@@ -430,6 +431,11 @@ function StatusEffectService:_refreshTargetGameplayState(target)
 
 	if actor.RefreshFromStatusEffects then
 		actor:RefreshFromStatusEffects()
+	end
+
+	local player = self:_resolvePlayerForSync(target)
+	if player and self.CombatService and (self:HasFlag(target, "Stunned") or self:HasFlag(target, "BlocksAbilities")) then
+		self.CombatService:ForceStopAim(player)
 	end
 end
 

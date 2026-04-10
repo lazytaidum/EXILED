@@ -12,6 +12,10 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local DevMenuController = {}
 DevMenuController.Name = "DevMenuController"
+DevMenuController.Dependencies = {
+	"EntityDebugController",
+	"InteractableDebugController",
+}
 
 local TOGGLE_KEY = Enum.KeyCode.RightShift
 local TOGGLE_ACTION = "ToggleDevMenu"
@@ -126,11 +130,14 @@ end
 
 function DevMenuController:_applyDebugUiState()
 	local enabled = self.DevState.DebugUiEnabled ~= false
-	if self.EntityDebugController and self.EntityDebugController.SetDebugUiEnabled then
-		self.EntityDebugController:SetDebugUiEnabled(enabled)
-	end
-	if self.InteractableDebugController and self.InteractableDebugController.SetDebugUiEnabled then
-		self.InteractableDebugController:SetDebugUiEnabled(enabled)
+	for _, controllerName in ipairs({
+		"EntityDebugController",
+		"InteractableDebugController",
+	}) do
+		local controller = self[controllerName] or (self.Controllers and self.Controllers[controllerName]) or (self.Ring and self.Ring[controllerName])
+		if controller and controller.SetDebugUiEnabled then
+			controller:SetDebugUiEnabled(enabled)
+		end
 	end
 end
 
@@ -303,6 +310,7 @@ function DevMenuController:_createUI()
 	launcher.TextSize = 12
 	launcher.TextColor3 = Color3.fromRGB(242, 212, 103)
 	launcher.Text = "DEV"
+	launcher.Visible = false
 	launcher.Parent = screenGui
 
 	local launcherCorner = Instance.new("UICorner")

@@ -9,6 +9,7 @@ local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 local WeaponPickupService = {}
 WeaponPickupService.Name = "WeaponPickupService"
 WeaponPickupService.Dependencies = {
+	"RemoteRegistry",
 	"CombatService",
 	"RoundHookService",
 }
@@ -36,6 +37,7 @@ function WeaponPickupService:Init(services)
 end
 
 function WeaponPickupService:Start()
+	self.UiToastRemote = self.RemoteRegistry:GetRemote("UiToastRequested")
 	if self.WeaponPickupsFolder then
 		self:_registerExistingPickups()
 
@@ -164,6 +166,13 @@ function WeaponPickupService:CompletePickup(player, pickup)
 	end
 
 	DebugLog:Log("Combat", string.format("[WeaponPickupService] %s picked up %s", player.Name, pickup.WeaponId))
+	if self.UiToastRemote then
+		self.UiToastRemote:FireClient(player, {
+			Title = "Weapon Picked Up",
+			Message = WeaponDefinitions[pickup.WeaponId].DisplayName,
+			Tint = "Weapon",
+		})
+	end
 	return true
 end
 

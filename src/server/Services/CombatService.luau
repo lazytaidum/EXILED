@@ -5,6 +5,7 @@ local Workspace = game:GetService("Workspace")
 local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local ItemDefinitions = require(ReplicatedStorage.Shared.Data.ItemDefinitions)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local FirearmAim = require(ReplicatedStorage.Shared.Utility.FirearmAim)
 local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
@@ -144,6 +145,39 @@ function CombatService:RefreshCombatState(player)
 			self:_syncCombatState(player)
 		end
 	end)
+end
+
+function CombatService:ForceStopAim(player)
+	local combatState = self.PlayerCombatStates[player]
+	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
+	if character and character.IsAiming then
+		character:SetAiming(false)
+	end
+
+	if combatState then
+		self:_syncCombatState(player)
+	end
+end
+
+function CombatService:GetEquippedWeaponDefinition(player)
+	local equippedState = self:GetEquippedWeaponState(player)
+	if not equippedState or equippedState.EntryType ~= "Weapon" then
+		return nil, equippedState
+	end
+
+	return WeaponDefinitions[equippedState.ItemId], equippedState
+end
+
+function CombatService:EmitShotVisual(player, origin, endPosition, didHit)
+	if not self.CombatShotVisualRemote or typeof(origin) ~= "Vector3" or typeof(endPosition) ~= "Vector3" then
+		return
+	end
+
+	self.CombatShotVisualRemote:FireClient(player, {
+		Origin = origin,
+		EndPosition = endPosition,
+		Hit = didHit == true,
+	})
 end
 
 function CombatService:HandleEquipWeapon(player, requestedSlot)
@@ -527,20 +561,9 @@ end
 
 function CombatService:_findRangedAttackTarget(character, weapon, attackData)
 	local rootPart = character.RootPart
-	local origin = rootPart.Position + Vector3.new(0, 1.5, 0)
-	local lookVector = rootPart.CFrame.LookVector
-	if type(attackData) == "table" and typeof(attackData.Direction) == "Vector3" then
-		local requestedDirection = attackData.Direction
-		if requestedDirection.Magnitude > 0.001 then
-			local normalizedDirection = requestedDirection.Unit
-			if lookVector:Dot(normalizedDirection) >= 0.25 then
-				lookVector = normalizedDirection
-			end
-		end
-	end
-	local muzzleOrigin = origin + (lookVector * 2.15) + (rootPart.CFrame.RightVector * 0.7) + Vector3.new(0, 0.55, 0)
-	origin = muzzleOrigin
-	local shotEndPosition = origin + (lookVector * (weapon.Range or 0))
+	local requestedDirection = type(attackData) == "table" and attackData.Direction or nil
+	local requestedOrigin = type(attackData) == "table" and attackData.Origin or nil
+	local cameraLookVector = FirearmAim.ResolveLookVector(rootPart.CFrame.LookVector, requestedDirection)
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	local filter = { character.Model }
@@ -549,7 +572,18 @@ function CombatService:_findRangedAttackTarget(character, weapon, attackData)
 		table.insert(filter, mapBounds)
 	end
 	raycastParams.FilterDescendantsInstances = filter
-	local result = Workspace:Raycast(origin, lookVector * (weapon.Range or 0), raycastParams)
+	local cameraOrigin = (typeof(requestedOrigin) == "Vector3" and (requestedOrigin - rootPart.Position).Magnitude <= 30)
+		and requestedOrigin
+		or (rootPart.Position + Vector3.new(0, 2, 0))
+	local aimPoint = FirearmAim.ResolveAimPoint(cameraOrigin, cameraLookVector, weapon.Range or 0, raycastParams, Workspace)
+	local origin = FirearmAim.GetMuzzleOrigin(rootPart.CFrame, cameraLookVector)
+	local shotDirection = aimPoint - origin
+	if shotDirection.Magnitude <= 0.001 then
+		shotDirection = cameraLookVector * (weapon.Range or 0)
+	end
+	local normalizedShotDirection = shotDirection.Unit
+	local shotEndPosition = origin + (normalizedShotDirection * (weapon.Range or 0))
+	local result = Workspace:Raycast(origin, normalizedShotDirection * (weapon.Range or 0), raycastParams)
 	if result then
 		shotEndPosition = result.Position
 		for _, entity in ipairs(self.EntityService.Entities or {}) do

@@ -19,7 +19,10 @@ local RemnantDefinitions = {
 				Keybind = "E",
 				Cooldown = 45,
 				Description = "Hologram gun burst.",
-				IsImplemented = false,
+				IsImplemented = true,
+				DamageMultiplier = 0.5,
+				Range = 160,
+				ShotInterval = 0.06,
 			},
 			Ability3 = {
 				Id = "Watchtower",

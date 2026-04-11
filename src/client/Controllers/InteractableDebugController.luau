@@ -2,6 +2,7 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local DebugFlags = require(ReplicatedStorage.Shared.Data.DebugFlags)
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local ItemDefinitions = require(ReplicatedStorage.Shared.Data.ItemDefinitions)
 local ObjectiveDefinitions = require(ReplicatedStorage.Shared.Data.ObjectiveDefinitions)
 local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
@@ -58,6 +59,13 @@ local function _getItemPickupLabel(instance)
 	return label, "ITEM", Color3.fromRGB(124, 214, 166)
 end
 
+local function _getHazardLabel(instance)
+	local displayName = instance:GetAttribute("DisplayName")
+	local spent = instance:GetAttribute("Spent") == true
+	local name = (displayName and displayName ~= "" and displayName) or instance.Name
+	return name, spent and "SPENT" or "HAZARD", spent and Color3.fromRGB(128, 128, 136) or Color3.fromRGB(255, 168, 92)
+end
+
 function InteractableDebugController:Init()
 	self.Player = self.World.Player
 	self.PlayerGui = self.World.PlayerGui
@@ -66,6 +74,7 @@ function InteractableDebugController:Init()
 		Objectives = Workspace:FindFirstChild("Objectives"),
 		WeaponPickups = Workspace:FindFirstChild("WeaponPickups"),
 		ItemPickups = Workspace:FindFirstChild("ItemPickups"),
+		EnvironmentalHazards = Workspace:FindFirstChild("EnvironmentalHazards"),
 	}
 	self.Overlays = {}
 end
@@ -90,6 +99,13 @@ function InteractableDebugController:Start()
 			self:_trackFolder(folder)
 		end
 	end
+
+	Workspace.ChildAdded:Connect(function(child)
+		if child.Name == "EnvironmentalHazards" and child:IsA("Folder") and not self.Folders.EnvironmentalHazards then
+			self.Folders.EnvironmentalHazards = child
+			self:_trackFolder(child)
+		end
+	end)
 
 	if self.Player then
 		self.Player.CharacterAdded:Connect(function()
@@ -229,11 +245,17 @@ function InteractableDebugController:_describeInstance(instance)
 		return _getItemPickupLabel(instance)
 	end
 
+	if self.Folders.EnvironmentalHazards and instance.Parent == self.Folders.EnvironmentalHazards then
+		return _getHazardLabel(instance)
+	end
+
 	return nil
 end
 
 function InteractableDebugController:_refreshOverlays()
-	local debugUiEnabled = self.DebugUiEnabled
+	local roundState = self.World:GetRoundState()
+	local phase = roundState and roundState.Phase or "Unknown"
+	local debugUiEnabled = self.DebugUiEnabled and (phase == GamePhase.Preparation or phase == GamePhase.Reception)
 	local character = nil
 	if self.World and self.World.GetCharacter then
 		character = self.World:GetCharacter()

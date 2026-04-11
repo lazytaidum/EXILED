@@ -106,7 +106,11 @@ function InteractionController:HandleInteractionUpdate(data)
 	if data.State == "Start" then
 		self.UI.Root.Enabled = true
 		self.UI.Label.Text = data.Target or "Interacting..."
-		self.UI.SubLabel.Text = "Hold to continue"
+		if string.find(string.lower(self.UI.Label.Text), "hazard", 1, true) or string.find(string.lower(self.UI.Label.Text), "log", 1, true) then
+			self.UI.SubLabel.Text = "Hold to trigger"
+		else
+			self.UI.SubLabel.Text = "Hold to continue"
+		end
 		self.UI.Bar.Size = UDim2.new(0, 0, 1, 0)
 		
 	elseif data.State == "Update" then

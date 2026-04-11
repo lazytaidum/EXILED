@@ -39,7 +39,11 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 		return false
 	end
 
-	local existing = self.ActiveStruggles[targetPlayer]
+	local canBegin, existing = self:CanBeginStruggle(entity, targetPlayer)
+	if not canBegin then
+		return false
+	end
+
 	if existing then
 		self:_endStruggle(targetPlayer, "Replaced")
 	end
@@ -117,6 +121,31 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 	return true
 end
 
+function StruggleService:CanBeginStruggle(entity, targetPlayer)
+	if not entity or not targetPlayer then
+		return false, nil
+	end
+
+	local existing = self.ActiveStruggles[targetPlayer]
+	if not existing then
+		return true, nil
+	end
+
+	if existing.Entity == entity then
+		return true, existing
+	end
+
+	local incomingPriority = tonumber(entity.StarRating) or tonumber(entity.Weight) or 0
+	local existingEntity = existing.Entity
+	local existingPriority = existingEntity and (tonumber(existingEntity.StarRating) or tonumber(existingEntity.Weight)) or 0
+
+	if incomingPriority > existingPriority then
+		return true, existing
+	end
+
+	return false, existing
+end
+
 function StruggleService:IsPlayerStruggling(player)
 	return self.ActiveStruggles[player] ~= nil
 end
@@ -179,6 +208,24 @@ function StruggleService:ProgressPeel(helperPlayer, interactable, amount)
 	end
 
 	return true, false
+end
+
+function StruggleService:InterruptStrugglesForEntity(entity, reason)
+	if not entity then
+		return 0
+	end
+
+	local interruptedCount = 0
+	for player, struggle in pairs(self.ActiveStruggles) do
+		if struggle.Entity == entity then
+			self:_endStruggle(player, reason or "Interrupted", {
+				PreserveEntityStun = true,
+			})
+			interruptedCount += 1
+		end
+	end
+
+	return interruptedCount
 end
 
 function StruggleService:_runLoop()
@@ -254,16 +301,20 @@ function StruggleService:_peelFree(player, struggle, helperPlayer)
 	DebugLog:Log("Interaction", string.format("[StruggleService] %s peeled %s off %s", helperPlayer and helperPlayer.Name or "Unknown", struggle.Entity.DisplayName, player.Name))
 end
 
-function StruggleService:_endStruggle(player, reason)
+function StruggleService:_endStruggle(player, reason, options)
 	local struggle = self.ActiveStruggles[player]
 	if not struggle then
 		return
 	end
 
+	options = options or {}
+
 	local statusService = self.StatusEffectService
 	if statusService then
 		statusService:RemoveStatus(player, struggle.TargetStatusId)
-		statusService:RemoveStatus(struggle.Entity, StatusEffectId.Stunned)
+		if not options.PreserveEntityStun then
+			statusService:RemoveStatus(struggle.Entity, StatusEffectId.Stunned)
+		end
 	end
 
 	self.ActiveStruggles[player] = nil

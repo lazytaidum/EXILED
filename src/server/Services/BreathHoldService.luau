@@ -111,6 +111,29 @@ function BreathHoldService:HandleHoldState(player, isHolding)
 	end
 end
 
+function BreathHoldService:CancelChallengesForEntity(entity, reason)
+	if not entity then
+		return 0
+	end
+
+	local cancelledCount = 0
+	for challengeId, challenge in pairs(self.ActiveChallenges) do
+		if challenge.Entity == entity then
+			for player in pairs(challenge.Participants) do
+				self.BreathHoldStateRemote:FireClient(player, {
+					State = "Stop",
+					Reason = reason or "Interrupted",
+				})
+			end
+
+			self.ActiveChallenges[challengeId] = nil
+			cancelledCount += 1
+		end
+	end
+
+	return cancelledCount
+end
+
 function BreathHoldService:_runLoop()
 	while true do
 		self:_updateChallenges()

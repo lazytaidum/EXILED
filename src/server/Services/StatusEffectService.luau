@@ -12,6 +12,7 @@ StatusEffectService.Dependencies = {
 	"RemoteRegistry",
 	"CharacterService",
 	"CombatService",
+	"EntityService",
 }
 
 function StatusEffectService:Init(services)
@@ -36,6 +37,7 @@ function StatusEffectService:ApplyStatus(target, statusId, params)
 		return nil
 	end
 
+	params = params or {}
 	local targetType = self:_getTargetType(target)
 	if not self:_statusAllowsTarget(definition, targetType) then
 		return nil
@@ -45,13 +47,20 @@ function StatusEffectService:ApplyStatus(target, statusId, params)
 	local instance = self:_getPrimaryStatusInstance(targetState, statusId)
 
 	if definition.IsDamageOverTime then
-		instance = self:_applyDotStatus(target, definition, params or {}, instance)
+		instance = self:_applyDotStatus(target, definition, params, instance)
 	else
-		instance = self:_applySimpleStatus(target, definition, params or {}, instance)
+		instance = self:_applySimpleStatus(target, definition, params, instance)
 	end
 
 	self:_markTargetDirty(target)
 	self:_refreshTargetGameplayState(target)
+
+	if params.InterruptAbilities == true and targetType == "Entity" and self.EntityService then
+		local actor = self:_resolveTargetActor(target)
+		if actor then
+			self.EntityService:InterruptEntityAbilities(actor, params.Source or statusId)
+		end
+	end
 
 	DebugLog:Log("Status", string.format("[StatusEffectService] Applied %s to %s", statusId, self:_describeTarget(target)))
 	return instance

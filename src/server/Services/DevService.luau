@@ -104,6 +104,8 @@ function DevService:_handleCommand(player, payload)
 		self:_toggleGodMode(player)
 	elseif command == "ToggleDebugUi" then
 		self:_toggleDebugUi(player)
+	elseif command == "SetHealth" then
+		self:_setHealth(player, payload.Health)
 	elseif command == "Refresh" then
 		self:_sendState(player)
 	end
@@ -296,6 +298,24 @@ function DevService:_toggleDebugUi(player)
 	local nextState = not (self.DebugUiEnabledByPlayer[player] ~= false)
 	self.DebugUiEnabledByPlayer[player] = nextState
 	self:_sendState(player, nextState and "Debug UI enabled" or "Debug UI disabled")
+end
+
+function DevService:_setHealth(player, healthValue)
+	local targetHealth = tonumber(healthValue)
+	if targetHealth == nil then
+		self:_sendState(player, "Invalid health value")
+		return
+	end
+
+	local character = self.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character.Humanoid then
+		self:_sendState(player, "No active character")
+		return
+	end
+
+	local humanoid = character.Humanoid
+	humanoid.Health = math.clamp(targetHealth, 1, humanoid.MaxHealth)
+	self:_sendState(player, string.format("Set health to %d", math.floor(humanoid.Health + 0.5)))
 end
 
 function DevService:_sendState(player, message)

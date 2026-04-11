@@ -57,14 +57,10 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 	end
 
 	if actionName == ActionName.Sprint then
-		if isActive and self.StaminaService and not self.StaminaService:HasSprintStamina(player) then
-			return
-		end
-
 		if isActive and self.World:IsInteracting(player) then
 			self.World:InterruptInteraction(player, "Sprint")
 		end
-		character:SetSprinting(isActive)
+		character:SetSprintHeld(isActive)
 		if isActive then
 			character:SetCrouching(false)
 			character:SetAiming(false)
@@ -72,7 +68,7 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 	elseif actionName == ActionName.Crouch then
 		character:SetCrouching(isActive)
 		if isActive then
-			character:SetSprinting(false)
+			character:SetSprintHeld(false)
 		end
 	else
 		local equippedEntry = self.InventoryService and self.InventoryService:GetEntry(player, (self.CombatService and self.CombatService.PlayerCombatStates[player] and self.CombatService.PlayerCombatStates[player].EquippedSlot) or 1)
@@ -83,7 +79,7 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 
 		character:SetAiming(isActive)
 		if isActive then
-			character:SetSprinting(false)
+			character:SetSprintHeld(false)
 		end
 	end
 

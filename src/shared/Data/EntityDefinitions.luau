@@ -8,6 +8,8 @@ local JiangshiDefinition = {
 	DisplayName = "Jiangshi",
 	StarRating = 1,
 	Weight = 1,
+	DirectorWeight = 1,
+	TimerValue = 180,
 
 	Attributes = {
 		EntityAttributes.Chase,
@@ -262,6 +264,8 @@ local SearchingForWisdomDefinition = {
 	TemplateName = "SearchingForWisdom",
 	StarRating = 2,
 	Weight = 2,
+	DirectorWeight = 2,
+	TimerValue = 240,
 
 	Attributes = {
 		EntityAttributes.Chase,

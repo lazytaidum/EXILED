@@ -77,12 +77,13 @@ function InterestService:_sampleCharacterInterest(player, character)
 	local lastPoint = self.LastPointByPlayer[player]
 	local isCrouching = character.IsCrouching == true
 	local isSprinting = character.IsSprinting == true
+	local isRunning = character.IsRunning == true
 	local moveDistanceMultiplier = 1
 	local strengthMultiplier = 1
 	local lifetimeMultiplier = 1
 	local followDistanceMultiplier = 1
 
-	if isSprinting then
+	if isSprinting or isRunning then
 		moveDistanceMultiplier *= self.SprintMoveDistanceMultiplier
 		strengthMultiplier *= self.SprintStrengthMultiplier
 		lifetimeMultiplier *= self.SprintLifetimeMultiplier

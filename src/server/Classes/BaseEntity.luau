@@ -109,6 +109,7 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.Cooldowns = {}
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
+	self.ActionSequenceId = 0
 	self.BasicAttackVariantIndex = 1
 	self.AbsorbedAbilityCount = 0
 	self.AbsorbedAbilitiesByPlayer = {}
@@ -920,6 +921,7 @@ function BaseEntity:ResetRuntimeState()
 	self.Cooldowns = {}
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
+	self.ActionSequenceId = 0
 	self.BasicAttackVariantIndex = 1
 	self.AbsorbedAbilityCount = 0
 	self.AbsorbedAbilitiesByPlayer = {}

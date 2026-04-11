@@ -15,6 +15,7 @@ InteractionService.Dependencies = {
 	"ObjectiveService",
 	"WeaponPickupService",
 	"ItemPickupService",
+	"EnvironmentalHazardService",
 	"StruggleService",
 }
 
@@ -193,6 +194,20 @@ function InteractionService:FindBestInteractable(player)
 		end
 	end
 
+	local environmentalHazardService = self.EnvironmentalHazardService
+	if environmentalHazardService then
+		for _, hazard in ipairs(environmentalHazardService:GetAvailableHazards()) do
+			local hazardInstance = hazard.Instance
+			if hazardInstance then
+				local distance = (hazardInstance.Position - playerPosition).Magnitude
+				if distance <= 12 and distance < bestDistance then
+					bestTarget = hazard
+					bestDistance = distance
+				end
+			end
+		end
+	end
+
 	return bestTarget
 end
 
@@ -220,6 +235,15 @@ function InteractionService:_updateInteraction(player, interaction)
 
 	if target and target.Type == InteractableType.ItemPickup then
 		local completed = self.ItemPickupService and self.ItemPickupService:CompletePickup(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop"
+		})
+		self:StopInteraction(player)
+		return
+	end
+
+	if target and target.Type == InteractableType.EnvironmentalHazard then
+		local completed = self.EnvironmentalHazardService and self.EnvironmentalHazardService:CompleteHazard(player, target)
 		self.InteractionStateRemote:FireClient(player, {
 			State = completed and "Complete" or "Stop"
 		})

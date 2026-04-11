@@ -19,6 +19,8 @@ CombatService.Dependencies = {
 	"RoundManager",
 	"RoundHookService",
 	"StatusEffectService",
+	"StruggleService",
+	"EnvironmentalHazardService",
 }
 
 function CombatService:Init(services)
@@ -463,6 +465,10 @@ function CombatService:HandleReload(player)
 	local character = self.CharacterService:GetCharacterByPlayer(player)
 	if not character or not character:IsAlive() then
 		return false
+	end
+
+	if self.StruggleService and self.StruggleService:IsPlayerStruggling(player) then
+		return self.EnvironmentalHazardService and self.EnvironmentalHazardService:TriggerNearestHazard(player, 12) or false
 	end
 
 	local equippedWeaponState = self:_getEquippedWeaponState(player, combatState)

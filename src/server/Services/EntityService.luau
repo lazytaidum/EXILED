@@ -16,6 +16,7 @@ EntityService.Dependencies = {
 	"RoundHookService",
 	"CharacterService",
 	"InterestService",
+	"SpawnService",
 	"StaminaService",
 	"StatusEffectService",
 	"InteractionService",
@@ -54,6 +55,7 @@ function EntityService:Init(services)
 	self.TemplateStorage = Instance.new("Folder")
 	self.TemplateStorage.Name = "EntityTemplateCache"
 	self.TemplateStorage.Parent = ServerStorage
+	self.SelectedRoundEntityIds = {}
 	self.RaycastParams = RaycastParams.new()
 	self.RaycastParams.FilterType = Enum.RaycastFilterType.Exclude
 end
@@ -317,6 +319,13 @@ function EntityService:_updateCasting(entity)
 		return
 	end
 
+	local statusService = self.StatusEffectService
+	if statusService and not statusService:CanUseAbilities(entity) then
+		entity:CancelCast()
+		self:_syncDebugAttributes(entity)
+		return
+	end
+
 	if os.clock() < activeCast.EndsAt then
 		return
 	end
@@ -456,6 +465,17 @@ function EntityService:_canUseAbility(entity, ability, candidates)
 		return false
 	end
 
+	if self.StruggleService and self:_abilityStartsStruggle(ability) then
+		local struggleTarget = self:_selectAbilityTarget(entity, ability, candidates)
+		if not struggleTarget then
+			return false
+		end
+
+		if not self.StruggleService:CanBeginStruggle(entity, struggleTarget) then
+			return false
+		end
+	end
+
 	if ability.RequireVisibleTarget and self:_countVisibleTargets(entity) <= 0 then
 		return false
 	end
@@ -583,6 +603,16 @@ function EntityService:_scoreAbilitySelection(entity, abilityId, ability, candid
 	end
 
 	return math.max(0.01, weight)
+end
+
+function EntityService:_abilityStartsStruggle(ability)
+	for _, step in ipairs(self:_getEffectSteps(ability)) do
+		if step.Type == "StartStruggle" then
+			return true
+		end
+	end
+
+	return false
 end
 
 function EntityService:_pickWeightedAbility(entity, available)
@@ -1319,16 +1349,29 @@ function EntityService:_repeatDamageTargetsFromEffect(entity, step, context)
 	local targets = self:_resolveEffectTargets(entity, step, context)
 	local hits = math.max(1, step.Hits or 1)
 	local interval = math.max(0, step.Interval or 0)
+	local actionSequenceId = entity.ActionSequenceId or 0
 
 	for _, player in ipairs(targets) do
 		if interval <= 0 then
 			for _ = 1, hits do
+				if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+					return
+				end
 				self:_damageTargetFromEffect(entity, player, step)
 			end
 		else
 			task.spawn(function()
 				for hitIndex = 1, hits do
 					if not entity or not entity.IsActive or entity.Health <= 0 then
+						return
+					end
+
+					if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+						return
+					end
+
+					local statusService = self.StatusEffectService
+					if statusService and not statusService:CanUseAbilities(entity) then
 						return
 					end
 
@@ -1341,6 +1384,27 @@ function EntityService:_repeatDamageTargetsFromEffect(entity, step, context)
 			end)
 		end
 	end
+end
+
+function EntityService:InterruptEntityAbilities(entity, reason)
+	if not entity then
+		return false
+	end
+
+	entity.ActionSequenceId = (entity.ActionSequenceId or 0) + 1
+	entity:CancelCast()
+
+	if self.StruggleService then
+		self.StruggleService:InterruptStrugglesForEntity(entity, reason or "Interrupted")
+	end
+
+	if self.BreathHoldService then
+		self.BreathHoldService:CancelChallengesForEntity(entity, reason or "Interrupted")
+	end
+
+	self:_syncDebugAttributes(entity)
+	DebugLog:Log("Entity", string.format("[EntityService] %s interrupted (%s)", entity.DisplayName, tostring(reason or "Unknown")))
+	return true
 end
 
 function EntityService:_spawnEntitiesFromEffect(entity, step, context)
@@ -1506,6 +1570,45 @@ function EntityService:SpawnEntity(entityId, params)
 	return entity
 end
 
+function EntityService:SetRoundLineup(entityIds)
+	self.SelectedRoundEntityIds = {}
+
+	for _, entityId in ipairs(entityIds or {}) do
+		self.SelectedRoundEntityIds[entityId] = true
+	end
+
+	self:_ensureRoundLineupEntities(entityIds or {})
+
+	DebugLog:Log("Entity", string.format(
+		"[EntityService] Round lineup set: %s",
+		#(entityIds or {}) > 0 and table.concat(entityIds, ", ") or "None"
+	))
+end
+
+function EntityService:_ensureRoundLineupEntities(entityIds)
+	for _, entityId in ipairs(entityIds or {}) do
+		if not self:_findRoundEntityById(entityId) then
+			local spawnPart = self.SpawnService and self.SpawnService:GetRandomEntitySpawn()
+			local targetCFrame = spawnPart and (spawnPart.CFrame + Vector3.new(0, 3, 0)) or nil
+			self:SpawnEntity(entityId, {
+				CFrame = targetCFrame,
+				Activate = false,
+				IsSummon = false,
+			})
+		end
+	end
+end
+
+function EntityService:_findRoundEntityById(entityId)
+	for _, entity in ipairs(self.Entities) do
+		if entity.Id == entityId and entity.OwnerEntity == nil then
+			return entity
+		end
+	end
+
+	return nil
+end
+
 function EntityService:_applyRuntimeEntityAppearance(model, definition, params)
 	local appearance = (params and params.RuntimeAppearance) or (definition and definition.RuntimeAppearance)
 	if not appearance then
@@ -1577,6 +1680,11 @@ function EntityService:_syncDebugAttributes(entity)
 		return
 	end
 
+	entity.Model:SetAttribute("EntityId", entity.Id)
+	entity.Model:SetAttribute("EntityDisplayName", entity.DisplayName)
+	entity.Model:SetAttribute("EntityState", entity:GetState())
+	entity.Model:SetAttribute("EntityTarget", entity:GetTarget() and entity:GetTarget().Name or "")
+	entity.Model:SetAttribute("EntityTerrorRadius", entity.TerrorRadius or 0)
 	entity.Model:SetAttribute("DebugEntityName", entity.DisplayName)
 	entity.Model:SetAttribute("DebugState", entity:GetState())
 	entity.Model:SetAttribute("DebugHealth", math.floor((entity.Health or 0) + 0.5))
@@ -1884,11 +1992,18 @@ function EntityService:_projectTowardVisibleInterest(origin, blockedPosition)
 	return blockedPosition - (direction.Unit * stepBack)
 end
 
-function EntityService:SetAllEntitiesActive(state)
+function EntityService:SetAllEntitiesActive(state, options)
+	options = options or {}
+	local resetRound = options.ResetRound == true
+	local selectedRoundEntityIds = self.SelectedRoundEntityIds or {}
+	local hasRoundSelection = next(selectedRoundEntityIds) ~= nil
+
 	for index = #self.Entities, 1, -1 do
 		local entity = self.Entities[index]
-		if entity.IsRuntimeEntity and not state then
-			self:_despawnEntity(entity, "ReceptionReset")
+		local participatesInRound = (not hasRoundSelection) or selectedRoundEntityIds[entity.Id] == true
+
+		if entity.IsRuntimeEntity and (resetRound or not participatesInRound) then
+			self:_despawnEntity(entity, resetRound and "RoundReset" or "LineupReset")
 			continue
 		end
 
@@ -1896,8 +2011,8 @@ function EntityService:SetAllEntitiesActive(state)
 			self:_clearRoundHooksForEntity(entity)
 		end
 
-		entity:SetActive(state)
-		if state then
+		entity:SetActive(state and participatesInRound)
+		if state and participatesInRound then
 			self:_registerRoundHooksForEntity(entity)
 		end
 		

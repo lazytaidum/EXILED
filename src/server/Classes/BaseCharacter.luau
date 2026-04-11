@@ -15,13 +15,18 @@ function BaseCharacter.new(player, model, services)
 	self.DefaultJumpPower = self.Humanoid.JumpPower
 	self.DefaultHipHeight = self.Humanoid.HipHeight
 	self.IsInvincible = false
+	self.IsSprintHeld = false
 	self.IsSprinting = false
+	self.IsRunning = false
+	self.IsFatigued = false
 	self.IsCrouching = false
 	self.IsAiming = false
 	
 	self.SpeedMultipliers = {}
 	self.SpeedModifierToken = 0
-	self.SprintMultiplier = 1.45
+	self.SprintMultiplier = 1.5
+	self.RunMultiplier = 1.25
+	self.FatigueRunMultiplier = 1.1
 	self.CrouchMultiplier = 0.5
 	self.AimMultiplier = 0.82
 	self.CrouchHipHeightMultiplier = 0.6
@@ -84,6 +89,8 @@ function BaseCharacter:_refreshMovement()
 	local movementMultiplier = self:_getCombinedSpeedMultiplier()
 	if self.IsSprinting then
 		movementMultiplier *= self.SprintMultiplier
+	elseif self.IsRunning then
+		movementMultiplier *= self.IsFatigued and self.FatigueRunMultiplier or self.RunMultiplier
 	end
 
 	if self.IsCrouching then
@@ -130,17 +137,37 @@ function BaseCharacter:SetSpeedMultiplier(key, multiplier)
 	self:_refreshMovement()
 end
 
-function BaseCharacter:SetSprinting(state)
+function BaseCharacter:SetSprintHeld(state)
 	state = state == true
-	if self.IsSprinting == state then
+	if self.IsSprintHeld == state then
 		return
 	end
 
-	self.IsSprinting = state
 	if state then
 		self.IsCrouching = false
+	else
+		self.IsSprinting = false
+		self.IsRunning = false
+		self.IsFatigued = false
+	end
+	self.IsSprintHeld = state
+
+	self:_refreshMovement()
+end
+
+function BaseCharacter:SetSprintMode(mode)
+	mode = mode or "Walk"
+	local isSprinting = mode == "Sprint"
+	local isRunning = mode == "Run" or mode == "Fatigue"
+	local isFatigued = mode == "Fatigue"
+
+	if self.IsSprinting == isSprinting and self.IsRunning == isRunning and self.IsFatigued == isFatigued then
+		return
 	end
 
+	self.IsSprinting = isSprinting
+	self.IsRunning = isRunning
+	self.IsFatigued = isFatigued
 	self:_refreshMovement()
 end
 
@@ -152,7 +179,10 @@ function BaseCharacter:SetCrouching(state)
 
 	self.IsCrouching = state
 	if state then
+		self.IsSprintHeld = false
 		self.IsSprinting = false
+		self.IsRunning = false
+		self.IsFatigued = false
 	end
 
 	self:_refreshMovement()
@@ -279,7 +309,10 @@ function BaseCharacter:SetAiming(state)
 
 	self.IsAiming = state
 	if state then
+		self.IsSprintHeld = false
 		self.IsSprinting = false
+		self.IsRunning = false
+		self.IsFatigued = false
 	end
 
 	self:_refreshMovement()

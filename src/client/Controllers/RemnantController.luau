@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
@@ -206,6 +207,14 @@ end
 
 function RemnantController:_refresh()
 	if not self.UI then
+		return
+	end
+
+	local roundState = self.World:GetRoundState()
+	local phase = roundState and roundState.Phase or "Unknown"
+	local shouldShow = phase == GamePhase.Preparation or phase == GamePhase.Reception
+	self.UI.Root.Enabled = shouldShow
+	if not shouldShow then
 		return
 	end
 

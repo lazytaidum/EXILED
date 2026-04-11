@@ -2,6 +2,7 @@ local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local DebugFlags = require(ReplicatedStorage.Shared.Data.DebugFlags)
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local EntityDebugController = {}
@@ -193,7 +194,9 @@ end
 
 function EntityDebugController:_refreshOverlays()
 	local now = Workspace:GetServerTimeNow()
-	local debugUiEnabled = self.DebugUiEnabled
+	local roundState = self.World:GetRoundState()
+	local phase = roundState and roundState.Phase or "Unknown"
+	local debugUiEnabled = self.DebugUiEnabled and phase == GamePhase.Reception
 
 	for _, model in ipairs(self.EntitiesFolder:GetChildren()) do
 		if not self.Overlays[model] then

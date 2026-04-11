@@ -1,9 +1,11 @@
 local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local CameraInputController = {}
@@ -29,9 +31,12 @@ function CameraInputController:Init()
 	self.IsUsingCustomCamera = false
 	self.Yaw = 0
 	self.Pitch = math.rad(-8)
+	self.ActiveCameraCue = nil
 end
 
 function CameraInputController:Start()
+	self.PlayCutsceneRemote = self.World.Remotes:WaitForChild(RemoteNames.PlayCutscene)
+
 	ContextActionService:BindActionAtPriority(
 		FREE_MOUSE_ACTION,
 		function(_, inputState)
@@ -53,15 +58,99 @@ function CameraInputController:Start()
 		self:_update(deltaTime)
 	end)
 
+	self.PlayCutsceneRemote.OnClientEvent:Connect(function(payload)
+		self:_handleCameraCue(payload)
+	end)
+
 	DebugLog:Log("ClientMovement", "[CameraInputController] Started")
 end
 
 function CameraInputController:_update(_deltaTime)
+	if self:_updateCameraCue() then
+		return
+	end
+
 	local shouldLock = self:_shouldLockMouse()
 	self:_applyCameraMode(shouldLock)
 	if shouldLock then
 		self:_updateCustomCamera()
 	end
+end
+
+function CameraInputController:_resolveCueTarget(targetNames)
+	for _, targetName in ipairs(targetNames or {}) do
+		local target = Workspace:FindFirstChild(targetName, true)
+		if target then
+			if target:IsA("BasePart") then
+				return target.CFrame.Position
+			end
+
+			if target:IsA("Model") then
+				local adornee = target.PrimaryPart or target:FindFirstChild("HumanoidRootPart") or target:FindFirstChildWhichIsA("BasePart")
+				if adornee then
+					return adornee.Position
+				end
+			end
+		end
+	end
+
+	return nil
+end
+
+function CameraInputController:_handleCameraCue(payload)
+	if type(payload) ~= "table" or payload.Type ~= "FocusTarget" then
+		return
+	end
+
+	local focusPosition = self:_resolveCueTarget(payload.TargetNames)
+	if not focusPosition then
+		return
+	end
+
+	local cameraOffset = payload.CameraOffset or {}
+	local lookOffset = payload.LookOffset or {}
+	local currentCFrame = self.World.Camera.CFrame
+	local targetLookPosition = focusPosition + Vector3.new(
+		tonumber(lookOffset.X) or 0,
+		tonumber(lookOffset.Y) or 0,
+		tonumber(lookOffset.Z) or 0
+	)
+	local targetCameraPosition = focusPosition + Vector3.new(
+		tonumber(cameraOffset.X) or 0,
+		tonumber(cameraOffset.Y) or 0,
+		tonumber(cameraOffset.Z) or 0
+	)
+
+	self.ActiveCameraCue = {
+		StartedAt = os.clock(),
+		TweenTime = math.max(0.01, tonumber(payload.TweenTime) or 0.35),
+		ExpiresAt = os.clock() + math.max(0.1, tonumber(payload.Duration) or 1.2),
+		FromCFrame = currentCFrame,
+		TargetCFrame = CFrame.lookAt(targetCameraPosition, targetLookPosition),
+	}
+end
+
+function CameraInputController:_updateCameraCue()
+	local cue = self.ActiveCameraCue
+	if not cue then
+		return false
+	end
+
+	local now = os.clock()
+	if now >= cue.ExpiresAt then
+		self.ActiveCameraCue = nil
+		self:_applyCameraMode(self:_shouldLockMouse())
+		return false
+	end
+
+	local alpha = math.clamp((now - cue.StartedAt) / cue.TweenTime, 0, 1)
+	self.World.Camera.CameraType = Enum.CameraType.Scriptable
+	self.World.Camera.CFrame = cue.FromCFrame:Lerp(cue.TargetCFrame, alpha)
+	self.IsUsingCustomCamera = false
+	self.IsLocked = false
+	UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+	UserInputService.MouseIconEnabled = true
+	return true
 end
 
 function CameraInputController:_shouldLockMouse()

@@ -321,7 +321,7 @@ function DevMenuController:_createUI()
 	frame.Name = "Panel"
 	frame.AnchorPoint = Vector2.new(0, 0.5)
 	frame.Position = UDim2.new(0, 18, 0.5, 0)
-	frame.Size = UDim2.new(0, 280, 0, 448)
+	frame.Size = UDim2.new(0, 280, 0, 494)
 	frame.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
 	frame.BackgroundTransparency = 0.08
 	frame.BorderSizePixel = 0
@@ -494,20 +494,50 @@ function DevMenuController:_createUI()
 		})
 	end)
 
-	self:_createSectionLabel(frame, "Utilities", 378)
-	local escapeButton = self:_createButton(frame, "Toggle Escape", UDim2.new(0, 12, 0, 392), UDim2.new(0, 124, 0, 22), function()
+	self:_createSectionLabel(frame, "Health", 378)
+	local healthBox = Instance.new("TextBox")
+	healthBox.Name = "HealthBox"
+	healthBox.Position = UDim2.new(0, 12, 0, 392)
+	healthBox.Size = UDim2.new(0, 62, 0, 22)
+	healthBox.BackgroundColor3 = Color3.fromRGB(40, 44, 54)
+	healthBox.BorderSizePixel = 0
+	healthBox.Font = Enum.Font.GothamBold
+	healthBox.TextSize = 12
+	healthBox.TextColor3 = Color3.fromRGB(240, 240, 240)
+	healthBox.PlaceholderText = "hp"
+	healthBox.Text = ""
+	healthBox.Parent = frame
+	local healthCorner = Instance.new("UICorner")
+	healthCorner.CornerRadius = UDim.new(0, 8)
+	healthCorner.Parent = healthBox
+
+	self:_createButton(frame, "Danger", UDim2.new(0, 82, 0, 392), UDim2.new(0, 58, 0, 22), function()
+		self:_request("SetHealth", {
+			Command = "SetHealth",
+			Health = 25,
+		})
+	end)
+	self:_createButton(frame, "Set", UDim2.new(0, 146, 0, 392), UDim2.new(0, 42, 0, 22), function()
+		self:_request("SetHealth", {
+			Command = "SetHealth",
+			Health = tonumber(healthBox.Text),
+		})
+	end)
+
+	self:_createSectionLabel(frame, "Utilities", 424)
+	local escapeButton = self:_createButton(frame, "Toggle Escape", UDim2.new(0, 12, 0, 438), UDim2.new(0, 124, 0, 22), function()
 		self:_request("ToggleEscape", {
 			Command = "ToggleEscape",
 		})
 	end)
 	escapeButton.Name = "EscapeButton"
-	local godButton = self:_createButton(frame, "God Mode", UDim2.new(0, 144, 0, 392), UDim2.new(0, 124, 0, 22), function()
+	local godButton = self:_createButton(frame, "God Mode", UDim2.new(0, 144, 0, 438), UDim2.new(0, 124, 0, 22), function()
 		self:_request("ToggleGodMode", {
 			Command = "ToggleGodMode",
 		})
 	end)
 	godButton.Name = "GodModeButton"
-	local debugUiButton = self:_createButton(frame, "Debug UI", UDim2.new(0, 12, 0, 418), UDim2.new(0, 256, 0, 20), function()
+	local debugUiButton = self:_createButton(frame, "Debug UI", UDim2.new(0, 12, 0, 464), UDim2.new(0, 256, 0, 20), function()
 		self:_request("ToggleDebugUi", {
 			Command = "ToggleDebugUi",
 		})
@@ -528,6 +558,7 @@ function DevMenuController:_createUI()
 		ItemName = itemName,
 		EntityName = entityName,
 		TimerBox = timerBox,
+		HealthBox = healthBox,
 		EscapeButton = escapeButton,
 		GodModeButton = godButton,
 		DebugUiButton = debugUiButton,

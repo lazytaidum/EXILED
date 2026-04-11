@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
@@ -13,6 +14,8 @@ function StaminaController:Init()
 	self.State = {
 		Current = 100,
 		Max = 100,
+		MovementState = "Walk",
+		RunDurationBeforeFatigue = 6,
 	}
 end
 
@@ -51,13 +54,26 @@ function StaminaController:_createUI()
 	label.Name = "Label"
 	label.BackgroundTransparency = 1
 	label.Position = UDim2.new(0, 10, 0, 4)
-	label.Size = UDim2.new(1, -20, 0, 12)
+	label.Size = UDim2.new(0.62, 0, 0, 12)
 	label.Font = Enum.Font.GothamBold
 	label.TextSize = 10
 	label.TextColor3 = Color3.fromRGB(180, 214, 255)
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = "Stamina"
 	label.Parent = frame
+
+	local stateLabel = Instance.new("TextLabel")
+	stateLabel.Name = "State"
+	stateLabel.BackgroundTransparency = 1
+	stateLabel.AnchorPoint = Vector2.new(1, 0)
+	stateLabel.Position = UDim2.new(1, -10, 0, 4)
+	stateLabel.Size = UDim2.new(0.34, 0, 0, 12)
+	stateLabel.Font = Enum.Font.GothamBold
+	stateLabel.TextSize = 10
+	stateLabel.TextColor3 = Color3.fromRGB(180, 214, 255)
+	stateLabel.TextXAlignment = Enum.TextXAlignment.Right
+	stateLabel.Text = "WALK"
+	stateLabel.Parent = frame
 
 	local barBackground = Instance.new("Frame")
 	barBackground.Name = "BarBackground"
@@ -78,6 +94,7 @@ function StaminaController:_createUI()
 		Root = screenGui,
 		Frame = frame,
 		Label = label,
+		StateLabel = stateLabel,
 		Bar = bar,
 	}
 
@@ -89,17 +106,39 @@ function StaminaController:_refresh()
 		return
 	end
 
+	local roundState = self.World:GetRoundState()
+	local phase = roundState and roundState.Phase or "Unknown"
+	local shouldShow = phase == GamePhase.Preparation or phase == GamePhase.Reception
+	self.UI.Root.Enabled = shouldShow
+	if not shouldShow then
+		return
+	end
+
 	local current = self.State.Current or 0
 	local max = math.max(1, self.State.Max or 100)
 	local ratio = math.clamp(current / max, 0, 1)
+	local movementState = tostring(self.State.MovementState or "Walk")
 	self.UI.Bar.Size = UDim2.new(ratio, 0, 1, 0)
 	self.UI.Label.Text = string.format("Stamina %.1f/%.0f", current, max)
+	self.UI.StateLabel.Text = string.upper(movementState)
 
-	if ratio <= 0.25 then
+	if movementState == "Fatigue" then
+		self.UI.StateLabel.TextColor3 = Color3.fromRGB(255, 156, 92)
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(255, 156, 92)
+	elseif movementState == "Run" then
+		self.UI.StateLabel.TextColor3 = Color3.fromRGB(242, 212, 103)
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(242, 212, 103)
+	elseif movementState == "Sprint" then
+		self.UI.StateLabel.TextColor3 = Color3.fromRGB(132, 224, 255)
+		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(109, 180, 255)
+	elseif ratio <= 0.25 then
+		self.UI.StateLabel.TextColor3 = Color3.fromRGB(214, 92, 92)
 		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(214, 92, 92)
 	elseif ratio <= 0.5 then
+		self.UI.StateLabel.TextColor3 = Color3.fromRGB(242, 212, 103)
 		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(242, 212, 103)
 	else
+		self.UI.StateLabel.TextColor3 = Color3.fromRGB(180, 214, 255)
 		self.UI.Bar.BackgroundColor3 = Color3.fromRGB(109, 180, 255)
 	end
 end

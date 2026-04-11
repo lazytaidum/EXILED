@@ -21,6 +21,7 @@ local bootOrder = {
 	require(ServicesFolder.CombatService),
 	require(ServicesFolder.WeaponPickupService),
 	require(ServicesFolder.ItemPickupService),
+	require(ServicesFolder.EnvironmentalHazardService),
 	require(ServicesFolder.QTEService),
 	require(ServicesFolder.StruggleService),
 	require(ServicesFolder.BreathHoldService),
@@ -31,6 +32,7 @@ local bootOrder = {
 	require(ServicesFolder.EntityService),
 	require(ServicesFolder.RemnantService),
 	require(ServicesFolder.EscapeService),
+	require(ServicesFolder.VotingService),
 	require(ManagersFolder.RoundManager),
 }
 

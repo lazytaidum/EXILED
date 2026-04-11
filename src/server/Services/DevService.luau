@@ -1,5 +1,6 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
 
 local DebugFlags = require(ReplicatedStorage.Shared.Data.DebugFlags)
 local EntityDefinitions = require(ReplicatedStorage.Shared.Data.EntityDefinitions)
@@ -36,6 +37,8 @@ function DevService:Start()
 	if not DebugFlags.Enabled or not DebugFlags.DevMenu then
 		return
 	end
+
+	Workspace:SetAttribute("DebugUiEnabled", true)
 
 	self.RequestRemote = self.RemoteRegistry:GetRemote(RemoteNames.RequestDevCommand)
 	self.StateRemote = self.RemoteRegistry:GetRemote(RemoteNames.DevStateChanged)
@@ -297,6 +300,7 @@ end
 function DevService:_toggleDebugUi(player)
 	local nextState = not (self.DebugUiEnabledByPlayer[player] ~= false)
 	self.DebugUiEnabledByPlayer[player] = nextState
+	Workspace:SetAttribute("DebugUiEnabled", nextState)
 	self:_sendState(player, nextState and "Debug UI enabled" or "Debug UI disabled")
 end
 

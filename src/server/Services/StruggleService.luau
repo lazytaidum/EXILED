@@ -67,6 +67,8 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 		PeelDuration = params.PeelDuration or 1.2,
 		PeelRange = params.PeelRange or 10,
 		PeelProgress = 0,
+		LungeOriginCFrame = params.LungeOriginCFrame,
+		ReturnEntityOnBreakFree = params.ReturnEntityOnBreakFree == true,
 	}
 
 	self.ActiveStruggles[targetPlayer] = struggle
@@ -276,6 +278,7 @@ function StruggleService:_breakFree(player, struggle)
 		})
 	end
 
+	self:_returnEntityAfterBreakFree(struggle)
 	self.ActiveStruggles[player] = nil
 	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, "Escaped")
@@ -294,6 +297,7 @@ function StruggleService:_peelFree(player, struggle, helperPlayer)
 		})
 	end
 
+	self:_returnEntityAfterBreakFree(struggle)
 	self.ActiveStruggles[player] = nil
 	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, "Peeled")
@@ -320,6 +324,19 @@ function StruggleService:_endStruggle(player, reason, options)
 	self.ActiveStruggles[player] = nil
 	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, reason or "Ended")
+end
+
+function StruggleService:_returnEntityAfterBreakFree(struggle)
+	if not struggle or not struggle.ReturnEntityOnBreakFree then
+		return
+	end
+
+	local entity = struggle.Entity
+	if not entity or not entity.RootPart or not struggle.LungeOriginCFrame then
+		return
+	end
+
+	entity.RootPart.CFrame = struggle.LungeOriginCFrame
 end
 
 function StruggleService:_setGrabDebugMarker(player, entity)

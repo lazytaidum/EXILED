@@ -205,8 +205,8 @@ function RoundManager:ClearRound()
 	table.clear(self.SelectedEntityLineup)
 	self.CurrentOutcome = RoundOutcome.None
 	self.CurrentReceptionDuration = RoundConfig.ReceptionDuration
-	if self.Services.InterestService then
-		self.Services.InterestService:Reset()
+	if self.Services.StimulusService then
+		self.Services.StimulusService:Reset()
 	end
 	if self.Services.RoundHookService then
 		self.Services.RoundHookService:ResetHooks()

@@ -57,6 +57,11 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.IgnoreLineOfSightForDetection = perception.IgnoreLineOfSightForDetection == true
 	self.IgnoreLineOfSightForInterest = perception.IgnoreLineOfSightForInterest == true
 	self.IgnoreLineOfSightForAttacks = perception.IgnoreLineOfSightForAttacks == true
+	self.StimulusInvestigationRadiusMultiplier = perception.StimulusInvestigationRadiusMultiplier or 2.5
+	self.SearchStimulusRadiusMultiplier = perception.SearchStimulusRadiusMultiplier or 3
+	self.InvestigateIntentDuration = perception.InvestigateIntentDuration or 4
+	self.SearchIntentDuration = perception.SearchIntentDuration or (self.AttentionDuration + 1.5)
+	self.StimulusReinvestigateCooldown = perception.StimulusReinvestigateCooldown or 2.5
 	self.TargetRetentionBonus = targeting.CurrentTargetBonus or 18
 	self.LineOfSightBonus = targeting.LineOfSightBonus or 25
 	self.MemoryBonus = targeting.MemoryBonus or 12
@@ -98,6 +103,14 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.TargetLastSeenAt = nil
 	self.TargetLastVisibleAt = nil
 	self.TargetMemory = {}
+	self.CurrentIntent = nil
+	self.IntentTargetPosition = nil
+	self.IntentSourceStimulus = nil
+	self.IntentExpiresAt = nil
+	self.IntentConfidence = 0
+	self.IntentMetadata = nil
+	self.InvestigatedStimulusKeys = {}
+	self.CurrentSearchCenter = nil
 	self.PatrolDestination = nil
 	self.PatrolPauseUntil = 0
 	self.ScoutArrivalTime = nil
@@ -110,6 +123,7 @@ function BaseEntity.new(model, definition, services, runtimeData)
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
 	self.ActionSequenceId = 0
+	self.SpecialMovementLockUntil = 0
 	self.BasicAttackVariantIndex = 1
 	self.AbsorbedAbilityCount = 0
 	self.AbsorbedAbilitiesByPlayer = {}
@@ -301,6 +315,14 @@ function BaseEntity:CancelCast()
 	self.ActiveCast = nil
 end
 
+function BaseEntity:LockSpecialMovement(duration)
+	self.SpecialMovementLockUntil = math.max(self.SpecialMovementLockUntil or 0, os.clock() + math.max(0, duration or 0))
+end
+
+function BaseEntity:IsSpecialMovementLocked()
+	return os.clock() < (self.SpecialMovementLockUntil or 0)
+end
+
 function BaseEntity:ApplyPersistentModifier(modifierName, amount)
 	if self.PersistentModifiers[modifierName] == nil then
 		self.PersistentModifiers[modifierName] = 0
@@ -368,6 +390,101 @@ end
 
 function BaseEntity:GetTarget()
 	return self.TargetPlayer
+end
+
+function BaseEntity:SetIntent(intentName, targetPosition, options)
+	options = options or {}
+	self.CurrentIntent = intentName
+	self.IntentTargetPosition = targetPosition
+	self.IntentSourceStimulus = options.SourceStimulus
+	self.IntentExpiresAt = options.Duration and (os.clock() + math.max(0, options.Duration)) or options.ExpiresAt or nil
+	self.IntentConfidence = options.Confidence or 0
+	self.IntentMetadata = options.Metadata
+
+	if options.SearchCenter ~= nil then
+		self.CurrentSearchCenter = options.SearchCenter
+	end
+end
+
+function BaseEntity:GetIntentName()
+	return self.CurrentIntent
+end
+
+function BaseEntity:GetIntentTargetPosition()
+	return self.IntentTargetPosition
+end
+
+function BaseEntity:GetIntentSourceStimulus()
+	return self.IntentSourceStimulus
+end
+
+function BaseEntity:GetIntentConfidence()
+	return self.IntentConfidence or 0
+end
+
+function BaseEntity:GetIntentMetadata()
+	return self.IntentMetadata
+end
+
+function BaseEntity:GetCurrentSearchCenter()
+	return self.CurrentSearchCenter
+end
+
+function BaseEntity:SetCurrentSearchCenter(position)
+	self.CurrentSearchCenter = position
+end
+
+function BaseEntity:HasIntent()
+	return self.CurrentIntent ~= nil
+end
+
+function BaseEntity:IsIntentExpired()
+	return self.IntentExpiresAt ~= nil and os.clock() >= self.IntentExpiresAt
+end
+
+function BaseEntity:ClearIntent()
+	self.CurrentIntent = nil
+	self.IntentTargetPosition = nil
+	self.IntentSourceStimulus = nil
+	self.IntentExpiresAt = nil
+	self.IntentConfidence = 0
+	self.IntentMetadata = nil
+	self.CurrentSearchCenter = nil
+end
+
+function BaseEntity:MarkStimulusInvestigated(stimulusKey, duration)
+	if not stimulusKey then
+		return
+	end
+
+	self.InvestigatedStimulusKeys[stimulusKey] = os.clock() + math.max(0, duration or self.StimulusReinvestigateCooldown)
+end
+
+function BaseEntity:HasInvestigatedStimulus(stimulusKey)
+	if not stimulusKey then
+		return false
+	end
+
+	local expiresAt = self.InvestigatedStimulusKeys[stimulusKey]
+	if not expiresAt then
+		return false
+	end
+
+	if os.clock() >= expiresAt then
+		self.InvestigatedStimulusKeys[stimulusKey] = nil
+		return false
+	end
+
+	return true
+end
+
+function BaseEntity:ClearExpiredInvestigatedStimuli()
+	local now = os.clock()
+	for stimulusKey, expiresAt in pairs(self.InvestigatedStimulusKeys) do
+		if now >= expiresAt then
+			self.InvestigatedStimulusKeys[stimulusKey] = nil
+		end
+	end
 end
 
 function BaseEntity:GetTargetLastKnownPosition()
@@ -906,6 +1023,14 @@ function BaseEntity:ResetRuntimeState()
 	self.TargetLastSeenAt = nil
 	self.TargetLastVisibleAt = nil
 	self.TargetMemory = {}
+	self.CurrentIntent = nil
+	self.IntentTargetPosition = nil
+	self.IntentSourceStimulus = nil
+	self.IntentExpiresAt = nil
+	self.IntentConfidence = 0
+	self.IntentMetadata = nil
+	self.InvestigatedStimulusKeys = {}
+	self.CurrentSearchCenter = nil
 	self.PatrolDestination = nil
 	self.PatrolDestinationReason = nil
 	self.PatrolPauseUntil = 0
@@ -922,6 +1047,7 @@ function BaseEntity:ResetRuntimeState()
 	self.ActiveEffects = {}
 	self.ActiveCast = nil
 	self.ActionSequenceId = 0
+	self.SpecialMovementLockUntil = 0
 	self.BasicAttackVariantIndex = 1
 	self.AbsorbedAbilityCount = 0
 	self.AbsorbedAbilitiesByPlayer = {}

@@ -1,10 +1,13 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local BaseEntity = require(ServerScriptService.Server.Classes.BaseEntity)
+local DebugFlags = require(ReplicatedStorage.Shared.Data.DebugFlags)
 local EntityDefinitions = require(ReplicatedStorage.Shared.Data.EntityDefinitions)
+local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local EntityAttributes = require(ReplicatedStorage.Shared.Enums.EntityAttributes)
 local StatusEffectId = require(ReplicatedStorage.Shared.Enums.StatusEffectId)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
@@ -15,13 +18,14 @@ EntityService.Dependencies = {
 	"RoundManager",
 	"RoundHookService",
 	"CharacterService",
-	"InterestService",
+	"StimulusService",
 	"SpawnService",
 	"StaminaService",
 	"StatusEffectService",
 	"InteractionService",
 	"StruggleService",
 	"BreathHoldService",
+	"RemoteRegistry",
 }
 
 local ENTITY_STATE = {
@@ -35,10 +39,12 @@ local ENTITY_STATE = {
 }
 
 local RECENT_HIT_DEBUG_DURATION = 0.75
+local LUNGE_DEBUG_VISUAL_DURATION = 2.5
 
 function EntityService:Init(services)
 	self.Services = services
 	self.Entities = {}
+	self.ActiveProjectiles = {}
 	self.EntityTemplates = {}
 	self.UpdateInterval = 0.2
 	self.NextRoundHookRuntimeId = 0
@@ -63,6 +69,7 @@ end
 function EntityService:Start()
 	self:_registerExistingTemplates()
 	self:_registerExistingEntities()
+	self.EntityAbilityVisualRemote = self.RemoteRegistry and self.RemoteRegistry:GetRemote(RemoteNames.EntityAbilityVisual)
 
 	task.spawn(function()
 		self:_runEntityLoop()
@@ -132,6 +139,8 @@ end
 
 function EntityService:_runEntityLoop()
 	while true do
+		self:_updateProjectiles(self.UpdateInterval)
+
 		for index = #self.Entities, 1, -1 do
 			local entity = self.Entities[index]
 			if entity:HasExpired() then
@@ -147,11 +156,17 @@ end
 
 function EntityService:_updateEntity(entity, deltaTime)
 	entity:ClearExpiredMemory()
+	entity:ClearExpiredInvestigatedStimuli()
 	entity:UpdateActiveEffects()
+	if entity:IsIntentExpired() then
+		entity:ClearIntent()
+	end
 
 	local candidates = self:_collectTargetCandidates(entity)
+	self:_pushPerceptionStimuli(entity, candidates)
 	local bestCandidate = self:_selectBestCandidate(entity, candidates)
 	self:_updateTargetSelection(entity, bestCandidate)
+	self:_solveEntityIntent(entity, bestCandidate)
 	self:_updateCasting(entity)
 	self:_updateEntityState(entity)
 	self:_tickEntityPassives(entity, deltaTime)
@@ -275,41 +290,163 @@ function EntityService:_updateTargetSelection(entity, bestCandidate)
 	end
 end
 
+function EntityService:_pushPerceptionStimuli(entity, candidates)
+	local stimulusService = self.StimulusService
+	if not stimulusService then
+		return
+	end
+
+	for _, candidate in ipairs(candidates) do
+		if candidate.IsVisible then
+			stimulusService:PushStimulus({
+				Key = string.format("VisualSighting:%s:%d", tostring(entity.Id), candidate.Player.UserId),
+				Type = "VisualSighting",
+				Position = candidate.Position,
+				SourcePlayer = candidate.Player,
+				Strength = 1.2,
+				Confidence = 1,
+				Duration = math.max(0.6, entity.AttentionDuration),
+				Tags = {
+					Visual = true,
+					Direct = true,
+				},
+			})
+		elseif candidate.Memory then
+			stimulusService:PushStimulus({
+				Key = string.format("LastKnownPosition:%s:%d", tostring(entity.Id), candidate.Player.UserId),
+				Type = "LastKnownPosition",
+				Position = candidate.Memory.LastKnownPosition,
+				SourcePlayer = candidate.Player,
+				Strength = 0.9,
+				Confidence = math.clamp(1 - (entity:GetTimeSinceTargetWasVisible(candidate.Player) / math.max(0.1, entity.MemoryDuration)), 0.1, 0.95),
+				Duration = math.max(0.75, entity.SearchIntentDuration),
+				Tags = {
+					Memory = true,
+					Search = true,
+				},
+			})
+		end
+	end
+end
+
+function EntityService:_solveEntityIntent(entity, bestCandidate)
+	local now = os.clock()
+	local currentIntent = entity:GetIntentName()
+
+	if bestCandidate and bestCandidate.IsVisible then
+		entity:SetIntent("Chase", bestCandidate.Position, {
+			Confidence = 1,
+			Duration = 0.5,
+			Metadata = {
+				Reason = "VisibleTarget",
+				TargetPlayer = bestCandidate.Player,
+			},
+		})
+		entity:SetCurrentSearchCenter(bestCandidate.Position)
+		return
+	end
+
+	if bestCandidate and bestCandidate.Memory then
+		local lastKnownPosition = bestCandidate.Memory.LastKnownPosition or bestCandidate.Position
+		entity:SetIntent("Search", lastKnownPosition, {
+			Confidence = math.clamp(1 - (entity:GetTimeSinceTargetWasVisible(bestCandidate.Player) / math.max(0.1, entity.MemoryDuration)), 0.2, 0.95),
+			Duration = entity.SearchIntentDuration,
+			Metadata = {
+				Reason = "TargetMemory",
+				TargetPlayer = bestCandidate.Player,
+				LastSeenAt = bestCandidate.Memory.LastSeenAt,
+			},
+			SearchCenter = lastKnownPosition,
+		})
+		return
+	end
+
+	local stimulus = self:_selectIntentStimulus(entity)
+	if stimulus then
+		local intentTarget = self:_resolveStimulusIntentTarget(entity, stimulus)
+		entity:SetIntent("Investigate", intentTarget, {
+			SourceStimulus = stimulus,
+			Confidence = stimulus.Confidence or 0.5,
+			Duration = math.min(entity.InvestigateIntentDuration, math.max(0.75, stimulus.ExpiresAt - now)),
+			Metadata = {
+				Reason = stimulus.Type,
+				StimulusKey = stimulus.Key,
+			},
+		})
+		return
+	end
+
+	if currentIntent ~= "Roam" then
+		entity:SetIntent("Roam", entity:GetRoamAnchor(), {
+			Confidence = 0.25,
+			Duration = entity.RoamAnchorMaxDuration,
+			Metadata = {
+				Reason = "NoStrongStimulus",
+			},
+		})
+	end
+end
+
+function EntityService:_selectIntentStimulus(entity)
+	local stimulusService = self.StimulusService
+	if not stimulusService then
+		return nil
+	end
+
+	return stimulusService:GetBestStimulusForEntity(entity, {
+		Radius = entity.DetectionRadius * (entity.StimulusInvestigationRadiusMultiplier or 2.5),
+		WeightByDirection = true,
+		PreferPlayer = entity:GetTarget(),
+		ExcludeKeys = entity.InvestigatedStimulusKeys,
+	})
+end
+
+function EntityService:_getTopStimuliForDebug(entity, limit)
+	local stimulusService = self.StimulusService
+	if not stimulusService then
+		return {}
+	end
+
+	local stimuli = stimulusService:GetStimuliNearPosition(
+		entity:GetPosition(),
+		entity.DetectionRadius * (entity.SearchStimulusRadiusMultiplier or 3),
+		{
+			WeightByDirection = true,
+			PreferPlayer = entity:GetTarget(),
+		}
+	)
+
+	local topStimuli = {}
+	for index = 1, math.min(limit or 3, #stimuli) do
+		table.insert(topStimuli, stimuli[index])
+	end
+
+	return topStimuli
+end
+
+function EntityService:_resolveStimulusIntentTarget(entity, stimulus)
+	local stimulusDestination = stimulus.Destination or stimulus.Position
+	if entity.IgnoreLineOfSightForInterest or self:_hasLineOfSightToPosition(entity, stimulusDestination) then
+		return self:_clampPositionToMapBounds(stimulusDestination)
+	end
+
+	local canSeeOrigin = self:_hasLineOfSightToPosition(entity, stimulus.Position)
+	return self:_clampPositionToMapBounds(self:_resolveStimulusInvestigationPoint(entity, stimulus, canSeeOrigin))
+end
+
 function EntityService:_updateEntityState(entity)
 	if entity:IsCasting() then
 		entity:EnterState(ENTITY_STATE.Casting)
 		return
 	end
 
-	local targetPlayer = entity:GetTarget()
-	if not targetPlayer then
-		if entity:GetState() ~= ENTITY_STATE.Patrol then
-			entity:PickPatrolDestination()
-		end
-		entity:EnterState(ENTITY_STATE.Patrol)
-		return
-	end
-
-	local memory = entity:GetTargetMemory(targetPlayer)
-	if not memory then
-		entity:SetTarget(nil)
-		entity:PickPatrolDestination()
-		entity:EnterState(ENTITY_STATE.Patrol)
-		return
-	end
-
-	if entity:HasAttentionOnTarget(targetPlayer) then
-		local lastKnownPosition = entity:GetTargetLastKnownPosition()
-		local hasRecentlySeenTarget = entity:GetTimeSinceTargetWasVisible(targetPlayer) <= entity.ChaseLostSightGraceDuration
-		local shouldKeepChasing = hasRecentlySeenTarget
-
-		if lastKnownPosition and not shouldKeepChasing then
-			shouldKeepChasing = not entity:IsNearPosition(lastKnownPosition, entity:GetStopDistance() + 1)
-		end
-
-		entity:EnterState(shouldKeepChasing and ENTITY_STATE.Chase or ENTITY_STATE.Scout)
-	else
+	local intentName = entity:GetIntentName()
+	if intentName == "Chase" then
+		entity:EnterState(ENTITY_STATE.Chase)
+	elseif intentName == "Search" then
 		entity:EnterState(ENTITY_STATE.Scout)
+	else
+		entity:EnterState(ENTITY_STATE.Patrol)
 	end
 end
 
@@ -607,7 +744,7 @@ end
 
 function EntityService:_abilityStartsStruggle(ability)
 	for _, step in ipairs(self:_getEffectSteps(ability)) do
-		if step.Type == "StartStruggle" then
+		if step.Type == "StartStruggle" or step.Type == "BlindHungerLunge" then
 			return true
 		end
 	end
@@ -688,6 +825,10 @@ function EntityService:_updateEntityMovement(entity, deltaTime)
 		return
 	end
 
+	if entity.IsSpecialMovementLocked and entity:IsSpecialMovementLocked() then
+		return
+	end
+
 	if not entity:HasAttribute(EntityAttributes.Chase) then
 		return
 	end
@@ -710,11 +851,14 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 		entity:EndSearchMode()
 	end
 
+	if entity:GetIntentName() == "Investigate" then
+		self:_updateInvestigateMovement(entity, deltaTime)
+		return
+	end
+
 	if entity:ShouldRelocateRoamAnchor() then
 		entity:ClearPatrolDestination()
-		if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2.5) then
-			self:_maybeRelocateRoamAnchor(entity, true)
-		end
+		self:_maybeRelocateRoamAnchor(entity, true)
 	end
 
 	if entity:IsPatrolPaused() then
@@ -723,9 +867,7 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 
 	local destination = entity:GetPatrolDestination()
 	if not destination then
-		if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2.5) then
-			self:_maybeRelocateRoamAnchor(entity, true)
-		end
+		self:_maybeRelocateRoamAnchor(entity, true)
 		destination = self:_pickReachablePatrolDestination(entity)
 	end
 
@@ -734,37 +876,26 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 	end
 
 	if entity:HasReachedPatrolDestination() then
-		local destinationReason = entity:GetPatrolDestinationReason()
 		entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity:GetPosition()))
 		entity:ClearPatrolDestination()
 		if entity.SearchMode then
-			if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 3) then
-				self:_maybeRelocateRoamAnchor(entity, true)
-			end
+			self:_maybeRelocateRoamAnchor(entity, true)
 			self:_pickReachablePatrolDestination(entity)
 			destination = entity:GetPatrolDestination()
 			if not destination then
 				return
 			end
 		else
-			if destinationReason ~= "Interest" then
-				entity:MarkPatrolPause()
-			end
-			if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2) then
-				self:_maybeRelocateRoamAnchor(entity, false)
-			end
+			entity:MarkPatrolPause()
+			self:_maybeRelocateRoamAnchor(entity, false)
 			self:_pickReachablePatrolDestination(entity)
-			if destinationReason ~= "Interest" then
-				return
-			end
+			return
 		end
 	end
 
 	if self:_isMovementStepBlocked(entity, destination) then
 		entity:ClearPatrolDestination()
-		if not self:_tryAssignInterestDestination(entity, entity.DetectionRadius * 2) then
-			self:_maybeRelocateRoamAnchor(entity, true)
-		end
+		self:_maybeRelocateRoamAnchor(entity, true)
 		self:_pickReachablePatrolDestination(entity)
 		return
 	end
@@ -773,10 +904,11 @@ function EntityService:_updatePatrolMovement(entity, deltaTime)
 end
 
 function EntityService:_updateScoutMovement(entity, deltaTime)
-	local destination = entity:GetTargetLastKnownPosition()
+	local destination = entity:GetCurrentSearchCenter() or entity:GetTargetLastKnownPosition() or entity:GetIntentTargetPosition()
 	if not destination then
 		entity:ClearScoutArrival()
 		entity:SetTarget(nil)
+		entity:ClearIntent()
 		entity:EnterState(ENTITY_STATE.Patrol)
 		entity:ClearPatrolDestination()
 		entity.PatrolPauseUntil = 0
@@ -791,47 +923,27 @@ function EntityService:_updateScoutMovement(entity, deltaTime)
 			if entity:HasScoutSweepRemaining() then
 				self:_pickReachableScoutDestination(entity)
 			else
-				local targetPlayer = entity:GetTarget()
-				entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity.ScoutOrigin or destination))
-				entity:ClearScoutArrival()
-				if targetPlayer then
-					entity:ForgetTarget(targetPlayer)
-				else
-					entity:SetTarget(nil)
-				end
-				entity:EnterState(ENTITY_STATE.Patrol)
-				entity.PatrolPauseUntil = 0
-				self:_pickReachablePatrolDestination(entity)
+				self:_completeSearchIntent(entity, destination)
 			end
 			return
 		end
 
-	if self:_isMovementStepBlocked(entity, scoutDestination) then
-		entity:ClearPatrolDestination()
-		self:_pickReachableScoutDestination(entity)
+		if self:_isMovementStepBlocked(entity, scoutDestination) then
+			entity:ClearPatrolDestination()
+			self:_pickReachableScoutDestination(entity)
+			return
+		end
+
+		entity:MoveToward(scoutDestination, deltaTime)
 		return
 	end
-
-	entity:MoveToward(scoutDestination, deltaTime)
-	return
-end
 
 	if entity:HasReachedScoutDestination() then
 		entity:BeginScoutSweep(destination)
 		if entity:HasScoutSweepRemaining() then
 			self:_pickReachableScoutDestination(entity)
 		else
-			local targetPlayer = entity:GetTarget()
-			entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity.ScoutOrigin or destination))
-			entity:ClearScoutArrival()
-			if targetPlayer then
-				entity:ForgetTarget(targetPlayer)
-			else
-				entity:SetTarget(nil)
-			end
-			entity:EnterState(ENTITY_STATE.Patrol)
-			entity.PatrolPauseUntil = 0
-			self:_pickReachablePatrolDestination(entity)
+			self:_completeSearchIntent(entity, destination)
 		end
 		return
 	end
@@ -843,6 +955,73 @@ end
 			self:_pickReachableScoutDestination(entity)
 		end
 		return
+	end
+
+	entity:MoveToward(destination, deltaTime)
+end
+
+function EntityService:_completeSearchIntent(entity, destination)
+	local targetPlayer = entity:GetTarget()
+	entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity.ScoutOrigin or destination))
+	entity:ClearScoutArrival()
+
+	local intentStimulus = entity:GetIntentSourceStimulus()
+	if intentStimulus and intentStimulus.Key then
+		entity:MarkStimulusInvestigated(intentStimulus.Key)
+	end
+
+	entity:ClearIntent()
+	if targetPlayer then
+		entity:ForgetTarget(targetPlayer)
+	else
+		entity:SetTarget(nil)
+	end
+
+	entity:EnterState(ENTITY_STATE.Patrol)
+	entity.PatrolPauseUntil = 0
+	self:_pickReachablePatrolDestination(entity)
+end
+
+function EntityService:_updateInvestigateMovement(entity, deltaTime)
+	local intentTarget = entity:GetIntentTargetPosition()
+	if not intentTarget or entity:IsIntentExpired() then
+		local intentStimulus = entity:GetIntentSourceStimulus()
+		if intentStimulus and intentStimulus.Key then
+			entity:MarkStimulusInvestigated(intentStimulus.Key)
+		end
+		entity:ClearIntent()
+		entity:ClearPatrolDestination()
+		return
+	end
+
+	local destination = entity:GetPatrolDestination()
+	if not destination or entity:GetPatrolDestinationReason() ~= "Investigate" then
+		destination = self:_resolveStimulusIntentTarget(entity, entity:GetIntentSourceStimulus() or {
+			Position = intentTarget,
+			Destination = intentTarget,
+		})
+		entity:SetPatrolDestination(destination, "Investigate")
+	end
+
+	if entity:IsNearPosition(destination, entity:GetStopDistance() + 0.5) then
+		local intentStimulus = entity:GetIntentSourceStimulus()
+		if intentStimulus and intentStimulus.Key then
+			entity:MarkStimulusInvestigated(intentStimulus.Key)
+		end
+		entity:SetRoamAnchor(self:_clampPositionToMapBounds(entity:GetPosition()))
+		entity:ClearPatrolDestination()
+		entity:MarkPatrolPause(0.4)
+		entity:ClearIntent()
+		return
+	end
+
+	if self:_isMovementStepBlocked(entity, destination) then
+		local adjustedDestination = self:_resolveStimulusIntentTarget(entity, entity:GetIntentSourceStimulus() or {
+			Position = intentTarget,
+			Destination = intentTarget,
+		})
+		entity:SetPatrolDestination(adjustedDestination, "Investigate")
+		destination = adjustedDestination
 	end
 
 	entity:MoveToward(destination, deltaTime)
@@ -863,38 +1042,6 @@ function EntityService:_maybeRelocateRoamAnchor(entity, forceRelocate)
 	end
 
 	entity:SetRoamAnchor(self:_clampPositionToMapBounds(anchor))
-	return true
-end
-
-function EntityService:_tryAssignInterestDestination(entity, radius)
-	local interestService = self.InterestService
-	if not interestService then
-		return false
-	end
-
-	local entityPosition = entity:GetPosition()
-	local preferredPlayer = entity:GetTarget()
-	local interestPoint = interestService:GetStrongestInterestNear(entityPosition, radius, {
-		WeightByDirection = true,
-		PreferPlayer = preferredPlayer,
-	})
-	if not interestPoint then
-		return false
-	end
-
-	local interestDestination = interestPoint.Destination or interestPoint.Position
-	if not entity.IgnoreLineOfSightForInterest then
-		local canSeeProjected = self:_hasLineOfSightToPosition(entity, interestDestination)
-		local canSeeOrigin = self:_hasLineOfSightToPosition(entity, interestPoint.Position)
-
-		if not canSeeProjected then
-			interestDestination = self:_resolveInterestInvestigationPoint(entity, interestPoint, canSeeOrigin)
-		end
-	end
-
-	local clampedPosition = self:_clampPositionToMapBounds(interestDestination)
-	entity:SetRoamAnchor(clampedPosition)
-	entity:SetPatrolDestination(clampedPosition, "Interest")
 	return true
 end
 
@@ -1285,13 +1432,9 @@ function EntityService:_executeEffectStep(entity, step, context)
 			self.StaminaService:DrainStamina(target, step.Amount or 0, step.Reason or entity.DisplayName)
 		end
 	elseif stepType == "StartStruggle" then
-		if not self.StruggleService then
-			return
-		end
-
-		for _, target in ipairs(self:_resolveEffectTargets(entity, step, context)) do
-			self.StruggleService:BeginStruggle(entity, target, step)
-		end
+		self:_startStruggleFromEffect(entity, step, context)
+	elseif stepType == "BlindHungerLunge" then
+		self:_startBlindHungerLungeFromEffect(entity, step, context)
 	elseif stepType == "StartBreathHoldChallenge" then
 		if not self.BreathHoldService then
 			return
@@ -1307,6 +1450,8 @@ function EntityService:_executeEffectStep(entity, step, context)
 			DetectionRadiusMultiplier = step.DetectionRadiusMultiplier,
 		})
 		self:_pickReachablePatrolDestination(entity)
+	elseif stepType == "LaunchProjectileStatus" then
+		self:_launchProjectileStatusFromEffect(entity, step, context)
 	elseif stepType == "SpawnEntity" then
 		self:_spawnEntitiesFromEffect(entity, step, context)
 	elseif stepType == "AbsorbAbility" then
@@ -1343,6 +1488,667 @@ function EntityService:_executeEffectStep(entity, step, context)
 
 		DebugLog:Log("Entity", string.format("[EntityService] %s %s", entity.DisplayName, message))
 	end
+end
+
+function EntityService:_launchProjectileStatusFromEffect(entity, step, context)
+	local targets = self:_resolveEffectTargets(entity, step, context)
+	for _, player in ipairs(targets) do
+		local character = self.CharacterService:GetCharacterByPlayer(player)
+		if character and character.RootPart and character:IsAlive() then
+			self:_spawnEntityProjectile(entity, player, step)
+		end
+	end
+end
+
+function EntityService:_spawnEntityProjectile(entity, targetPlayer, step)
+	if not entity or not entity.RootPart then
+		return
+	end
+
+	local origin = entity.RootPart.Position + Vector3.new(0, step.HeightOffset or 3, 0)
+	local targetCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+	local targetPosition = targetCharacter and targetCharacter.RootPart and targetCharacter.RootPart.Position or (origin + entity.RootPart.CFrame.LookVector * 4)
+	local forwardDirection = entity.RootPart.CFrame.LookVector
+	local initialDirection = (forwardDirection * (step.ForwardBiasDistance or 18)) + ((targetPosition - origin) * (step.InitialTrackingWeight or 0.35))
+	if initialDirection.Magnitude <= 0.01 then
+		initialDirection = forwardDirection
+	end
+
+	local projectilePart = Instance.new("Part")
+	projectilePart.Name = step.VisualName or "EntityProjectile"
+	projectilePart.Anchored = true
+	projectilePart.CanCollide = false
+	projectilePart.CanQuery = false
+	projectilePart.CanTouch = false
+	projectilePart.CastShadow = false
+	projectilePart.Material = Enum.Material.Neon
+	projectilePart.Color = step.Color or Color3.fromRGB(236, 224, 178)
+	projectilePart.Size = step.VisualSize or Vector3.new(0.45, 1.1, 0.18)
+	projectilePart.CFrame = CFrame.lookAt(origin, origin + initialDirection.Unit)
+	projectilePart.Parent = Workspace
+
+	local projectile = {
+		Entity = entity,
+		TargetPlayer = targetPlayer,
+		Part = projectilePart,
+		Direction = initialDirection.Unit,
+		Speed = step.Speed or 42,
+		TurnRate = step.TurnRate or 0.22,
+		HitRadius = step.HitRadius or 1,
+		ExpiresAt = os.clock() + (step.Lifetime or 2.5),
+		StatusId = step.StatusId,
+		StatusDuration = step.Duration,
+		StatusMagnitude = step.Magnitude,
+		StatusTier = step.Tier,
+		StickDuration = step.StickDuration or step.Duration or 0,
+		StickName = step.StickName or "QiSealTalisman",
+		HomingWeight = step.HomingWeight or 0.18,
+		ForwardBiasDistance = step.ForwardBiasDistance or 18,
+	}
+
+	table.insert(self.ActiveProjectiles, projectile)
+end
+
+function EntityService:_updateProjectiles(deltaTime)
+	for index = #self.ActiveProjectiles, 1, -1 do
+		local projectile = self.ActiveProjectiles[index]
+		if self:_updateProjectile(projectile, deltaTime) ~= true then
+			self:_destroyProjectile(projectile)
+			table.remove(self.ActiveProjectiles, index)
+		end
+	end
+end
+
+function EntityService:_updateProjectile(projectile, deltaTime)
+	if not projectile or not projectile.Part or not projectile.Part.Parent then
+		return false
+	end
+
+	if os.clock() >= (projectile.ExpiresAt or 0) then
+		return false
+	end
+
+	local entity = projectile.Entity
+	if not entity or not entity.IsActive or entity.Health <= 0 then
+		return false
+	end
+
+	local targetCharacter = self.CharacterService:GetCharacterByPlayer(projectile.TargetPlayer)
+	if not targetCharacter or not targetCharacter.RootPart or not targetCharacter:IsAlive() then
+		return false
+	end
+
+	local currentPosition = projectile.Part.Position
+	local targetPosition = targetCharacter.RootPart.Position + Vector3.new(0, 1.6, 0)
+	local desiredDirection = targetPosition - currentPosition
+	if desiredDirection.Magnitude <= 0.01 then
+		desiredDirection = projectile.Direction
+	end
+
+	local currentDirection = projectile.Direction or desiredDirection.Unit
+	local forwardBiasDirection = currentDirection
+	local homingWeight = projectile.HomingWeight or 0.18
+	local weightedDesiredDirection = (forwardBiasDirection * math.max(0, 1 - homingWeight)) + (desiredDirection.Unit * homingWeight)
+	local turnAlpha = math.clamp((projectile.TurnRate or 0.22) * math.max(1, deltaTime * 60), 0, 1)
+	local blendedDirection = currentDirection:Lerp(weightedDesiredDirection.Unit, turnAlpha)
+	if blendedDirection.Magnitude <= 0.001 then
+		blendedDirection = desiredDirection.Unit
+	end
+	projectile.Direction = blendedDirection.Unit
+
+	local moveDistance = (projectile.Speed or 42) * deltaTime
+	local nextPosition = currentPosition + (projectile.Direction * moveDistance)
+	projectile.Part.CFrame = CFrame.lookAt(nextPosition, nextPosition + projectile.Direction)
+
+	local hitRadius = projectile.HitRadius or 2.25
+	local closestPoint = self:_getClosestPointOnSegment(currentPosition, nextPosition, targetPosition)
+	if (targetPosition - closestPoint).Magnitude <= hitRadius then
+		self:_resolveProjectileHit(projectile, targetCharacter)
+		return false
+	end
+
+	return true
+end
+
+function EntityService:_getClosestPointOnSegment(segmentStart, segmentEnd, point)
+	local segment = segmentEnd - segmentStart
+	local segmentLengthSquared = segment:Dot(segment)
+	if segmentLengthSquared <= 0.0001 then
+		return segmentStart
+	end
+
+	local alpha = math.clamp((point - segmentStart):Dot(segment) / segmentLengthSquared, 0, 1)
+	return segmentStart + (segment * alpha)
+end
+
+function EntityService:_resolveProjectileHit(projectile, targetCharacter)
+	if not projectile or not targetCharacter or not targetCharacter.Player then
+		return
+	end
+
+	if self.StatusEffectService and projectile.StatusId then
+		self.StatusEffectService:ApplyStatus(targetCharacter.Player, projectile.StatusId, {
+			Duration = projectile.StatusDuration,
+			Magnitude = projectile.StatusMagnitude,
+			Tier = projectile.StatusTier,
+			Source = projectile.Entity and projectile.Entity.DisplayName or "Projectile",
+		})
+	end
+
+	local characterModel = targetCharacter.Model
+	local head = characterModel and characterModel:FindFirstChild("Head")
+	if head then
+		local talisman = Instance.new("Part")
+		talisman.Name = projectile.StickName or "ProjectileSeal"
+		talisman.Anchored = false
+		talisman.CanCollide = false
+		talisman.CanQuery = false
+		talisman.CanTouch = false
+		talisman.CastShadow = false
+		talisman.Material = Enum.Material.Neon
+		talisman.Color = projectile.Part and projectile.Part.Color or Color3.fromRGB(236, 224, 178)
+		talisman.Size = Vector3.new(0.55, 0.75, 0.08)
+		talisman.CFrame = head.CFrame * CFrame.new(0, 0.05, -0.52)
+		talisman.Parent = characterModel
+
+		local weld = Instance.new("WeldConstraint")
+		weld.Part0 = talisman
+		weld.Part1 = head
+		weld.Parent = talisman
+
+		task.delay(math.max(0.1, projectile.StickDuration or 0), function()
+			if talisman and talisman.Parent then
+				talisman:Destroy()
+			end
+		end)
+	end
+end
+
+function EntityService:_destroyProjectile(projectile)
+	if projectile and projectile.Part and projectile.Part.Parent then
+		projectile.Part:Destroy()
+	end
+end
+
+function EntityService:_startStruggleFromEffect(entity, step, context)
+	if not self.StruggleService then
+		return
+	end
+
+	for _, target in ipairs(self:_resolveEffectTargets(entity, step, context)) do
+		local targetCharacter = self.CharacterService:GetCharacterByPlayer(target)
+		if targetCharacter and targetCharacter.RootPart and targetCharacter:IsAlive() then
+			local originCFrame = entity.RootPart and entity.RootPart.CFrame or nil
+			local struggleParams = table.clone(step)
+			struggleParams.LungeOriginCFrame = originCFrame
+			struggleParams.ReturnEntityOnBreakFree = step.ReturnEntityOnBreakFree == true
+
+			local hasLunge = (step.LungeDuration or 0) > 0 or (step.LungeSpeed or 0) > 0
+			if hasLunge then
+				if not step.RequireLineOfSight or entity.IgnoreLineOfSightForAttacks or self:_hasLineOfSight(entity, targetCharacter) then
+					self:_performStruggleLunge(entity, target, targetCharacter, struggleParams)
+				end
+			elseif self:_canResolveStruggleTarget(entity, targetCharacter, step) then
+				self:_applyStruggleLunge(entity, targetCharacter, step)
+				self.StruggleService:BeginStruggle(entity, target, struggleParams)
+			end
+		end
+	end
+end
+
+function EntityService:_startBlindHungerLungeFromEffect(entity, step, context)
+	if not self.StruggleService then
+		return
+	end
+
+	for _, target in ipairs(self:_resolveEffectTargets(entity, step, context)) do
+		local targetCharacter = self.CharacterService:GetCharacterByPlayer(target)
+		if targetCharacter and targetCharacter.RootPart and targetCharacter:IsAlive() then
+			local originCFrame = entity.RootPart and entity.RootPart.CFrame or nil
+			local struggleParams = table.clone(step)
+			struggleParams.LungeOriginCFrame = originCFrame
+			struggleParams.ReturnEntityOnBreakFree = step.ReturnEntityOnBreakFree == true
+
+			if not step.RequireLineOfSight or entity.IgnoreLineOfSightForAttacks or self:_hasLineOfSight(entity, targetCharacter) then
+				self:_performBlindHungerLunge(entity, target, targetCharacter, struggleParams)
+			end
+		end
+	end
+end
+
+function EntityService:_performBlindHungerLunge(entity, targetPlayer, targetCharacter, struggleParams)
+	if not entity or not entity.RootPart or not targetCharacter or not targetCharacter.RootPart then
+		return
+	end
+
+	local startPosition = entity.RootPart.Position
+	local targetGroundPosition = self:_getStruggleLungeGroundPosition(startPosition, targetCharacter, struggleParams)
+	if not targetGroundPosition then
+		return
+	end
+
+	local dashOffset = targetGroundPosition - startPosition
+	local dashDistance = dashOffset.Magnitude
+	if dashDistance <= 0.05 then
+		return
+	end
+
+	local lungeDuration
+	if (struggleParams.LungeSpeed or 0) > 0 then
+		lungeDuration = dashDistance / struggleParams.LungeSpeed
+		lungeDuration = math.max(struggleParams.MinLungeDuration or 0.1, lungeDuration)
+		if struggleParams.MaxLungeDuration then
+			lungeDuration = math.min(struggleParams.MaxLungeDuration, lungeDuration)
+		end
+	else
+		lungeDuration = math.max(0.05, struggleParams.LungeDuration or 0.12)
+	end
+
+	entity.ActionSequenceId = (entity.ActionSequenceId or 0) + 1
+	local actionSequenceId = entity.ActionSequenceId
+	entity:LockSpecialMovement(lungeDuration + math.max(0, struggleParams.ImpactDelay or 0.05) + 0.1)
+
+	local dashDirection = dashOffset.Unit
+	local contactRadius = math.max(0.5, struggleParams.GrabRange or 3.2)
+	local minTravelFractionBeforeHit = math.clamp(struggleParams.MinTravelFractionBeforeHit or 0.85, 0, 0.98)
+
+	self:_showEntityAbilityVisual("BlindHungerLunge", {
+		EntityModel = entity.Model,
+		EntityId = entity.Id,
+		StartPosition = startPosition,
+		EndPosition = targetGroundPosition,
+		Duration = lungeDuration,
+		LeapHeight = struggleParams.LeapHeight or 0,
+		ContactRadius = contactRadius,
+	})
+	self:_spawnStruggleLungeDebugVisual(startPosition, targetGroundPosition, contactRadius)
+
+	task.spawn(function()
+		local elapsed = 0
+		local finalPosition = targetGroundPosition
+
+		while elapsed < lungeDuration do
+			if not entity or not entity.RootPart or not entity.IsActive or entity.Health <= 0 then
+				return
+			end
+
+			if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+				return
+			end
+
+			local deltaTime = RunService.Heartbeat:Wait()
+			elapsed += deltaTime
+
+			local alpha = math.clamp(elapsed / lungeDuration, 0, 1)
+			local currentPosition = startPosition:Lerp(targetGroundPosition, alpha)
+			entity.RootPart.CFrame = CFrame.lookAt(
+				Vector3.new(currentPosition.X, entity.RootPart.Position.Y, currentPosition.Z),
+				Vector3.new(currentPosition.X, entity.RootPart.Position.Y, currentPosition.Z) + Vector3.new(dashDirection.X, 0, dashDirection.Z)
+			)
+
+			if alpha >= minTravelFractionBeforeHit then
+				local liveCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+				if liveCharacter and liveCharacter.RootPart and liveCharacter:IsAlive() then
+					local liveOffset = liveCharacter.RootPart.Position - entity.RootPart.Position
+					local planarLiveOffset = Vector3.new(liveOffset.X, 0, liveOffset.Z)
+					if planarLiveOffset.Magnitude <= contactRadius then
+						finalPosition = entity.RootPart.Position
+						break
+					end
+				end
+			end
+		end
+
+		if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+			return
+		end
+
+		local endPosition = Vector3.new(finalPosition.X, entity.RootPart.Position.Y, finalPosition.Z)
+		entity.RootPart.CFrame = CFrame.lookAt(endPosition, endPosition + Vector3.new(dashDirection.X, 0, dashDirection.Z))
+
+		local liveCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+		if not liveCharacter or not liveCharacter.RootPart or not liveCharacter:IsAlive() then
+			return
+		end
+
+		local liveOffset = liveCharacter.RootPart.Position - entity.RootPart.Position
+		local planarLiveOffset = Vector3.new(liveOffset.X, 0, liveOffset.Z)
+		if planarLiveOffset.Magnitude > contactRadius then
+			return
+		end
+
+		local impactDelay = math.max(0, struggleParams.ImpactDelay or 0.05)
+		if impactDelay > 0 then
+			task.wait(impactDelay)
+		end
+
+		if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+			return
+		end
+
+		self.StruggleService:BeginStruggle(entity, targetPlayer, struggleParams)
+	end)
+end
+
+function EntityService:_canResolveStruggleTarget(entity, targetCharacter, step)
+	if not entity or not targetCharacter or not targetCharacter.RootPart or not targetCharacter:IsAlive() then
+		return false
+	end
+
+	local startRange = step.StartRange or step.Range or 0
+	if startRange > 0 and not entity:IsInRange(targetCharacter.RootPart.Position, startRange) then
+		return false
+	end
+
+	if step.RequireLineOfSight and not (entity.IgnoreLineOfSightForAttacks or self:_hasLineOfSight(entity, targetCharacter)) then
+		return false
+	end
+
+	return true
+end
+
+function EntityService:_applyStruggleLunge(entity, targetCharacter, step)
+	if not entity or not entity.RootPart or not targetCharacter or not targetCharacter.RootPart then
+		return
+	end
+
+	local landingCFrame = self:_getStruggleLungeCFrame(entity, targetCharacter, step)
+	if not landingCFrame then
+		return
+	end
+
+	entity.RootPart.CFrame = landingCFrame
+end
+
+function EntityService:_getStruggleLungeCFrame(entity, targetCharacter, step)
+	if not entity or not entity.RootPart or not targetCharacter or not targetCharacter.RootPart then
+		return nil
+	end
+
+	local origin = entity.RootPart.Position
+	local targetPosition = targetCharacter.RootPart.Position
+	local offset = targetPosition - origin
+	local planarOffset = Vector3.new(offset.X, 0, offset.Z)
+	if planarOffset.Magnitude <= 0.05 then
+		return nil
+	end
+
+	local lungeStopDistance = step.LungeStopDistance or math.max(entity:GetStopDistance(), 2.25)
+	local lungeDistance = math.min(
+		planarOffset.Magnitude,
+		math.max(0, planarOffset.Magnitude - lungeStopDistance),
+		step.LungeDistance or planarOffset.Magnitude
+	)
+	if lungeDistance <= 0 then
+		return nil
+	end
+
+	local newPosition = origin + (planarOffset.Unit * lungeDistance)
+	newPosition = Vector3.new(newPosition.X, entity.RootPart.Position.Y, newPosition.Z)
+	local lookTarget = Vector3.new(targetPosition.X, entity.RootPart.Position.Y, targetPosition.Z)
+	return CFrame.lookAt(newPosition, lookTarget)
+end
+
+function EntityService:_performStruggleLunge(entity, targetPlayer, targetCharacter, struggleParams)
+	if not entity or not entity.RootPart or not targetCharacter or not targetCharacter.RootPart then
+		return
+	end
+
+	local startCFrame = entity.RootPart.CFrame
+	local startPosition = startCFrame.Position
+	local targetGroundPosition = self:_getStruggleLungeGroundPosition(startPosition, targetCharacter, struggleParams)
+	if not targetGroundPosition then
+		return
+	end
+
+	local dashOffset = targetGroundPosition - startPosition
+	local dashDistance = dashOffset.Magnitude
+	if dashDistance <= 0.05 then
+		return
+	end
+
+	local useConstantSpeed = (struggleParams.LungeSpeed or 0) > 0
+	local lungeDuration
+	if useConstantSpeed then
+		lungeDuration = dashDistance / struggleParams.LungeSpeed
+		lungeDuration = math.max(struggleParams.MinLungeDuration or 0.1, lungeDuration)
+		if struggleParams.MaxLungeDuration then
+			lungeDuration = math.min(struggleParams.MaxLungeDuration, lungeDuration)
+		end
+	else
+		lungeDuration = math.max(0.05, struggleParams.LungeDuration or 0.12)
+	end
+
+	entity.ActionSequenceId = (entity.ActionSequenceId or 0) + 1
+	local actionSequenceId = entity.ActionSequenceId
+	entity:LockSpecialMovement(lungeDuration + math.max(0, struggleParams.ImpactDelay or 0.05) + 0.05)
+
+	task.spawn(function()
+		local leapHeight = struggleParams.LeapHeight or 0
+		local leapSharpness = struggleParams.LeapSharpness or 1.6
+		local resolveStep = table.clone(struggleParams)
+		resolveStep.StartRange = 0
+
+		local dashDirection = dashOffset.Unit
+		local dashLookTarget = startPosition + Vector3.new(dashDirection.X, 0, dashDirection.Z)
+		local previousPosition = startPosition
+		local contactRadius = math.max(0.5, struggleParams.GrabRange or 3.2)
+		local minTravelBeforeHit = math.max(0, struggleParams.MinTravelBeforeHit or 0)
+		local minTravelFractionBeforeHit = math.clamp(struggleParams.MinTravelFractionBeforeHit or 0, 0, 0.95)
+		local requiredTravelBeforeHit = math.max(
+			math.min(minTravelBeforeHit, dashDistance * 0.9),
+			dashDistance * minTravelFractionBeforeHit
+		)
+		self:_showEntityAbilityVisual("BlindHungerLunge", {
+			EntityModel = entity.Model,
+			EntityId = entity.Id,
+			StartPosition = startPosition,
+			EndPosition = targetGroundPosition,
+			Duration = lungeDuration,
+			LeapHeight = leapHeight,
+			ContactRadius = contactRadius,
+		})
+		self:_spawnStruggleLungeDebugVisual(startPosition, targetGroundPosition, contactRadius)
+
+		local elapsed = 0
+		while elapsed < lungeDuration do
+			if not entity or not entity.RootPart or not entity.IsActive or entity.Health <= 0 then
+				return
+			end
+
+			if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+				return
+			end
+
+			local liveCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+			if not liveCharacter or not liveCharacter.RootPart or not liveCharacter:IsAlive() then
+				return
+			end
+
+			local alpha = math.clamp(elapsed / lungeDuration, 0, 1)
+			local travelAlpha = useConstantSpeed and alpha or (1 - math.pow(1 - alpha, math.max(1, leapSharpness)))
+			local blendedPosition = startPosition + (dashDirection * dashDistance * travelAlpha)
+			local traveledDistance = (Vector3.new(blendedPosition.X, 0, blendedPosition.Z) - Vector3.new(startPosition.X, 0, startPosition.Z)).Magnitude
+
+			local closestPoint = self:_getClosestPointOnSegment(previousPosition, blendedPosition, liveCharacter.RootPart.Position)
+			local hitOffset = liveCharacter.RootPart.Position - closestPoint
+			local planarHitOffset = Vector3.new(hitOffset.X, 0, hitOffset.Z)
+			if traveledDistance >= requiredTravelBeforeHit and planarHitOffset.Magnitude <= contactRadius and self:_canResolveStruggleTarget(entity, liveCharacter, resolveStep) then
+				local impactPosition = Vector3.new(closestPoint.X, entity.RootPart.Position.Y, closestPoint.Z)
+				entity.RootPart.CFrame = CFrame.lookAt(impactPosition, impactPosition + Vector3.new(dashDirection.X, 0, dashDirection.Z))
+				if self:_commitStruggleImpact(entity, targetPlayer, struggleParams, resolveStep, actionSequenceId) then
+					return
+				end
+			end
+
+			previousPosition = blendedPosition
+			elapsed += RunService.Heartbeat:Wait()
+		end
+
+		if (entity.ActionSequenceId or 0) ~= actionSequenceId then
+			return
+		end
+
+		if entity and entity.RootPart then
+			local endPosition = Vector3.new(targetGroundPosition.X, entity.RootPart.Position.Y, targetGroundPosition.Z)
+			entity.RootPart.CFrame = CFrame.lookAt(endPosition, endPosition + Vector3.new(dashDirection.X, 0, dashDirection.Z))
+		end
+	end)
+end
+
+function EntityService:_showEntityAbilityVisual(visualType, payload)
+	if not self.EntityAbilityVisualRemote then
+		return
+	end
+
+	local finalPayload = {
+		Type = visualType,
+	}
+
+	for key, value in pairs(payload or {}) do
+		finalPayload[key] = value
+	end
+
+	self.EntityAbilityVisualRemote:FireAllClients(finalPayload)
+end
+
+function EntityService:_spawnStruggleLungeDebugVisual(startPosition, targetPosition, contactRadius)
+	if not DebugFlags.Enabled or not DebugFlags.Entity or Workspace:GetAttribute("DebugUiEnabled") == false then
+		return
+	end
+
+	local visualsFolder = Workspace:FindFirstChild("EntityDebugVisuals")
+	if not visualsFolder then
+		visualsFolder = Instance.new("Folder")
+		visualsFolder.Name = "EntityDebugVisuals"
+		visualsFolder.Parent = Workspace
+	end
+
+	local dashOffset = targetPosition - startPosition
+	local dashDistance = dashOffset.Magnitude
+	if dashDistance <= 0.05 then
+		return
+	end
+
+	local linePart = Instance.new("Part")
+	linePart.Name = "BlindHungerPath"
+	linePart.Anchored = true
+	linePart.CanCollide = false
+	linePart.CanQuery = false
+	linePart.CanTouch = false
+	linePart.Material = Enum.Material.Neon
+	linePart.Color = Color3.fromRGB(255, 168, 76)
+	linePart.Transparency = 0.05
+	linePart.Size = Vector3.new(0.7, 0.7, dashDistance)
+	linePart.CFrame = CFrame.lookAt(startPosition, targetPosition) * CFrame.new(0, 0, -(dashDistance * 0.5))
+	linePart.Parent = visualsFolder
+
+	local radiusPart = Instance.new("Part")
+	radiusPart.Name = "BlindHungerRadius"
+	radiusPart.Anchored = true
+	radiusPart.CanCollide = false
+	radiusPart.CanQuery = false
+	radiusPart.CanTouch = false
+	radiusPart.Shape = Enum.PartType.Ball
+	radiusPart.Material = Enum.Material.Neon
+	radiusPart.Color = Color3.fromRGB(255, 225, 125)
+	radiusPart.Transparency = 0.45
+	radiusPart.Size = Vector3.new(contactRadius * 2, contactRadius * 2, contactRadius * 2)
+	radiusPart.Position = targetPosition
+	radiusPart.Parent = visualsFolder
+
+	task.delay(LUNGE_DEBUG_VISUAL_DURATION, function()
+		if linePart.Parent then
+			linePart:Destroy()
+		end
+		if radiusPart.Parent then
+			radiusPart:Destroy()
+		end
+	end)
+end
+
+function EntityService:_commitStruggleImpact(entity, targetPlayer, struggleParams, resolveStep, actionSequenceId)
+	local liveCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+	if not liveCharacter or not self:_canResolveStruggleTarget(entity, liveCharacter, resolveStep) then
+		return false
+	end
+
+	local grabCFrame = self:_getStruggleGrabCFrame(entity, liveCharacter, struggleParams)
+	if grabCFrame and entity.RootPart then
+		local currentPosition = entity.RootPart.Position
+		local targetPosition = grabCFrame.Position
+		local planarOffset = Vector3.new(targetPosition.X - currentPosition.X, 0, targetPosition.Z - currentPosition.Z)
+		local maxGrabSnapDistance = math.max(0, struggleParams.MaxGrabSnapDistance or 0)
+
+		if maxGrabSnapDistance > 0 and planarOffset.Magnitude > maxGrabSnapDistance then
+			local limitedPosition = currentPosition + (planarOffset.Unit * maxGrabSnapDistance)
+			local lookTarget = Vector3.new(liveCharacter.RootPart.Position.X, limitedPosition.Y, liveCharacter.RootPart.Position.Z)
+			entity.RootPart.CFrame = CFrame.lookAt(limitedPosition, lookTarget)
+		else
+			entity.RootPart.CFrame = grabCFrame
+		end
+	end
+
+	local impactDelay = math.max(0, struggleParams.ImpactDelay or 0.05)
+	if impactDelay > 0 then
+		task.wait(impactDelay)
+	end
+
+	if actionSequenceId ~= nil and (entity.ActionSequenceId or 0) ~= actionSequenceId then
+		return false
+	end
+
+	local finalCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
+	if not finalCharacter or not self:_canResolveStruggleTarget(entity, finalCharacter, resolveStep) then
+		return false
+	end
+
+	return self.StruggleService:BeginStruggle(entity, targetPlayer, struggleParams) == true
+end
+
+function EntityService:_getStruggleLungeGroundPosition(startPosition, targetCharacter, step)
+	if not startPosition or not targetCharacter or not targetCharacter.RootPart then
+		return nil
+	end
+
+	local targetPosition = targetCharacter.RootPart.Position
+	local predictionSeconds = step.TargetPredictionSeconds or 0.18
+	local predictedTargetPosition = targetPosition + (targetCharacter.RootPart.AssemblyLinearVelocity * predictionSeconds)
+	local planarOffset = Vector3.new(predictedTargetPosition.X - startPosition.X, 0, predictedTargetPosition.Z - startPosition.Z)
+	if planarOffset.Magnitude <= 0.05 then
+		return nil
+	end
+
+	local lungeStopDistance = step.LungeStopDistance or 0.6
+	local overshootDistance = math.max(0, step.OvershootDistance or 0)
+	local lungeDistance = math.min(
+		planarOffset.Magnitude + overshootDistance,
+		math.max(0, (planarOffset.Magnitude - lungeStopDistance) + overshootDistance),
+		step.LungeDistance or planarOffset.Magnitude
+	)
+	if lungeDistance <= 0 then
+		return nil
+	end
+
+	return startPosition + Vector3.new(planarOffset.Unit.X * lungeDistance, 0, planarOffset.Unit.Z * lungeDistance)
+end
+
+function EntityService:_getStruggleGrabCFrame(entity, targetCharacter, step)
+	if not entity or not entity.RootPart or not targetCharacter or not targetCharacter.RootPart then
+		return nil
+	end
+
+	local targetPosition = targetCharacter.RootPart.Position
+	local entityPosition = entity.RootPart.Position
+	local planarOffset = Vector3.new(targetPosition.X - entityPosition.X, 0, targetPosition.Z - entityPosition.Z)
+	if planarOffset.Magnitude <= 0.05 then
+		return nil
+	end
+
+	local grabStopDistance = step.GrabStopDistance or 0.55
+	local targetFloorPosition = Vector3.new(targetPosition.X, entity.RootPart.Position.Y, targetPosition.Z)
+	local newPosition = targetFloorPosition - (planarOffset.Unit * grabStopDistance)
+	return CFrame.lookAt(newPosition, targetFloorPosition)
 end
 
 function EntityService:_repeatDamageTargetsFromEffect(entity, step, context)
@@ -1675,10 +2481,39 @@ function EntityService:_markRecentHit(entity, amount, sourceLabel)
 	entity.Model:SetAttribute("DebugRecentHitExpiresAt", Workspace:GetServerTimeNow() + RECENT_HIT_DEBUG_DURATION)
 end
 
+function EntityService:_formatDebugStimulusText(stimulus)
+	if not stimulus then
+		return "None"
+	end
+
+	local sourcePlayer = stimulus.SourcePlayer and stimulus.SourcePlayer.Name or nil
+	local sourceLabel = sourcePlayer and ("@" .. sourcePlayer) or ""
+	return string.format(
+		"%s%s %.2f",
+		tostring(stimulus.Type or "Unknown"),
+		sourceLabel and sourceLabel ~= "" and (" " .. sourceLabel) or "",
+		tonumber(stimulus.Score or stimulus.Confidence or 0) or 0
+	)
+end
+
 function EntityService:_syncDebugAttributes(entity)
 	if not entity or not entity.Model then
 		return
 	end
+
+	local topStimuli = self:_getTopStimuliForDebug(entity, 3)
+	local topStimulusLabels = {}
+	for _, stimulus in ipairs(topStimuli) do
+		table.insert(topStimulusLabels, self:_formatDebugStimulusText(stimulus))
+	end
+
+	local intentName = entity:GetIntentName() or "None"
+	local intentStimulus = entity:GetIntentSourceStimulus()
+	local intentMetadata = entity:GetIntentMetadata() or {}
+	local searchCenter = entity:GetCurrentSearchCenter()
+	local searchCenterText = searchCenter and string.format("%d,%d", math.floor(searchCenter.X + 0.5), math.floor(searchCenter.Z + 0.5)) or ""
+	local targetPlayer = entity:GetTarget()
+	local targetMemoryAge = targetPlayer and entity:GetTargetMemory(targetPlayer) and entity:GetTimeSinceTargetWasVisible(targetPlayer) or math.huge
 
 	entity.Model:SetAttribute("EntityId", entity.Id)
 	entity.Model:SetAttribute("EntityDisplayName", entity.DisplayName)
@@ -1687,6 +2522,12 @@ function EntityService:_syncDebugAttributes(entity)
 	entity.Model:SetAttribute("EntityTerrorRadius", entity.TerrorRadius or 0)
 	entity.Model:SetAttribute("DebugEntityName", entity.DisplayName)
 	entity.Model:SetAttribute("DebugState", entity:GetState())
+	entity.Model:SetAttribute("DebugIntent", intentName)
+	entity.Model:SetAttribute("DebugIntentConfidence", string.format("%.2f", entity:GetIntentConfidence() or 0))
+	entity.Model:SetAttribute("DebugIntentReason", tostring(intentMetadata.Reason or (intentStimulus and intentStimulus.Type) or "None"))
+	entity.Model:SetAttribute("DebugTopStimuli", table.concat(topStimulusLabels, " | "))
+	entity.Model:SetAttribute("DebugSearchCenter", searchCenterText)
+	entity.Model:SetAttribute("DebugMemoryAge", targetMemoryAge < math.huge and string.format("%.1fs", targetMemoryAge) or "")
 	entity.Model:SetAttribute("DebugHealth", math.floor((entity.Health or 0) + 0.5))
 	entity.Model:SetAttribute("DebugMaxHealth", math.floor((entity.MaxHealth or 0) + 0.5))
 	entity.Model:SetAttribute("DebugTarget", entity:GetTarget() and entity:GetTarget().Name or "")
@@ -1932,9 +2773,9 @@ function EntityService:_hasLineOfSightToPosition(entity, position)
 	return result == nil
 end
 
-function EntityService:_resolveInterestInvestigationPoint(entity, interestPoint, canSeeOrigin)
+function EntityService:_resolveStimulusInvestigationPoint(entity, stimulus, canSeeOrigin)
 	local entityPosition = entity:GetPosition()
-	local originPoint = interestPoint.Position
+	local originPoint = stimulus.Position
 	if canSeeOrigin then
 		return originPoint
 	end

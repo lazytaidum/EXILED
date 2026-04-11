@@ -19,6 +19,7 @@ local RemoteNames = {
 	CombatStateChanged = "CombatStateChanged",
 	CombatHitConfirmed = "CombatHitConfirmed",
 	CombatShotVisual = "CombatShotVisual",
+	EntityAbilityVisual = "EntityAbilityVisual",
 	StaminaStateChanged = "StaminaStateChanged",
 	UiToastRequested = "UiToastRequested",
 	PlayCutscene = "PlayCutscene",

@@ -13,7 +13,7 @@ local bootOrder = {
 	require(ServicesFolder.DevService),
 	require(ServicesFolder.PlayerService),
 	require(ServicesFolder.CharacterService),
-	require(ServicesFolder.InterestService),
+	require(ServicesFolder.StimulusService),
 	require(ServicesFolder.StaminaService),
 	require(ServicesFolder.MovementService),
 	require(ServicesFolder.StatusEffectService),

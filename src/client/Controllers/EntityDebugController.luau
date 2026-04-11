@@ -86,7 +86,7 @@ function EntityDebugController:_trackEntity(model)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "EntityDebugOverlay"
-	billboard.Size = UDim2.new(0, 236, 0, 90)
+	billboard.Size = UDim2.new(0, 270, 0, 136)
 	billboard.StudsOffset = Vector3.new(0, 5.55, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Adornee = adornee
@@ -125,9 +125,44 @@ function EntityDebugController:_trackEntity(model)
 	stateLabel.TextXAlignment = Enum.TextXAlignment.Left
 	stateLabel.Parent = frame
 
+	local intentLabel = Instance.new("TextLabel")
+	intentLabel.Name = "IntentLabel"
+	intentLabel.Position = UDim2.new(0, 10, 0, 39)
+	intentLabel.Size = UDim2.new(1, -20, 0, 12)
+	intentLabel.BackgroundTransparency = 1
+	intentLabel.Font = Enum.Font.Gotham
+	intentLabel.TextColor3 = Color3.fromRGB(214, 180, 64)
+	intentLabel.TextSize = 10
+	intentLabel.TextXAlignment = Enum.TextXAlignment.Left
+	intentLabel.Parent = frame
+
+	local stimulusLabel = Instance.new("TextLabel")
+	stimulusLabel.Name = "StimulusLabel"
+	stimulusLabel.Position = UDim2.new(0, 10, 0, 54)
+	stimulusLabel.Size = UDim2.new(1, -20, 0, 24)
+	stimulusLabel.BackgroundTransparency = 1
+	stimulusLabel.Font = Enum.Font.Gotham
+	stimulusLabel.TextColor3 = Color3.fromRGB(164, 208, 250)
+	stimulusLabel.TextSize = 10
+	stimulusLabel.TextWrapped = true
+	stimulusLabel.TextYAlignment = Enum.TextYAlignment.Top
+	stimulusLabel.TextXAlignment = Enum.TextXAlignment.Left
+	stimulusLabel.Parent = frame
+
+	local memoryLabel = Instance.new("TextLabel")
+	memoryLabel.Name = "MemoryLabel"
+	memoryLabel.Position = UDim2.new(0, 10, 0, 80)
+	memoryLabel.Size = UDim2.new(1, -20, 0, 12)
+	memoryLabel.BackgroundTransparency = 1
+	memoryLabel.Font = Enum.Font.Gotham
+	memoryLabel.TextColor3 = Color3.fromRGB(224, 192, 138)
+	memoryLabel.TextSize = 10
+	memoryLabel.TextXAlignment = Enum.TextXAlignment.Left
+	memoryLabel.Parent = frame
+
 	local abilityLabel = Instance.new("TextLabel")
 	abilityLabel.Name = "AbilityLabel"
-	abilityLabel.Position = UDim2.new(0, 10, 0, 39)
+	abilityLabel.Position = UDim2.new(0, 10, 0, 94)
 	abilityLabel.Size = UDim2.new(1, -20, 0, 12)
 	abilityLabel.BackgroundTransparency = 1
 	abilityLabel.Font = Enum.Font.Gotham
@@ -138,7 +173,7 @@ function EntityDebugController:_trackEntity(model)
 
 	local healthLabel = Instance.new("TextLabel")
 	healthLabel.Name = "HealthLabel"
-	healthLabel.Position = UDim2.new(0, 10, 0, 54)
+	healthLabel.Position = UDim2.new(0, 10, 0, 108)
 	healthLabel.Size = UDim2.new(1, -20, 0, 12)
 	healthLabel.BackgroundTransparency = 1
 	healthLabel.Font = Enum.Font.Gotham
@@ -149,7 +184,7 @@ function EntityDebugController:_trackEntity(model)
 
 	local hitLabel = Instance.new("TextLabel")
 	hitLabel.Name = "HitLabel"
-	hitLabel.Position = UDim2.new(0, 10, 0, 68)
+	hitLabel.Position = UDim2.new(0, 10, 0, 121)
 	hitLabel.Size = UDim2.new(1, -20, 0, 12)
 	hitLabel.BackgroundTransparency = 1
 	hitLabel.Font = Enum.Font.GothamBold
@@ -163,6 +198,9 @@ function EntityDebugController:_trackEntity(model)
 		Frame = frame,
 		NameLabel = nameLabel,
 		StateLabel = stateLabel,
+		IntentLabel = intentLabel,
+		StimulusLabel = stimulusLabel,
+		MemoryLabel = memoryLabel,
 		AbilityLabel = abilityLabel,
 		HealthLabel = healthLabel,
 		HitLabel = hitLabel,
@@ -212,6 +250,12 @@ function EntityDebugController:_refreshOverlays()
 
 		local name = model:GetAttribute("DebugEntityName") or model.Name
 		local state = model:GetAttribute("DebugState") or "Unknown"
+		local intent = model:GetAttribute("DebugIntent") or "None"
+		local intentConfidence = model:GetAttribute("DebugIntentConfidence") or "0.00"
+		local intentReason = model:GetAttribute("DebugIntentReason") or "None"
+		local topStimuli = model:GetAttribute("DebugTopStimuli") or "None"
+		local searchCenter = model:GetAttribute("DebugSearchCenter") or ""
+		local memoryAge = model:GetAttribute("DebugMemoryAge") or ""
 		local health = model:GetAttribute("DebugHealth") or 0
 		local maxHealth = model:GetAttribute("DebugMaxHealth") or 0
 		local target = model:GetAttribute("DebugTarget") or ""
@@ -225,6 +269,9 @@ function EntityDebugController:_refreshOverlays()
 		overlay.Billboard.Enabled = debugUiEnabled
 		overlay.NameLabel.Text = _clampText(name, 32)
 		overlay.StateLabel.Text = string.format("State: %s%s", _clampText(state, 12), target ~= "" and ("  Target: " .. _clampText(target, 14)) or "")
+		overlay.IntentLabel.Text = string.format("Intent: %s (%s)  via %s", _clampText(intent, 12), _clampText(intentConfidence, 4), _clampText(intentReason, 16))
+		overlay.StimulusLabel.Text = string.format("Stimuli: %s", _clampText(topStimuli, 96))
+		overlay.MemoryLabel.Text = string.format("Memory: %s%s", memoryAge ~= "" and memoryAge or "None", searchCenter ~= "" and ("  Search: " .. searchCenter) or "")
 		overlay.AbilityLabel.Text = string.format("Last: %s%s", _clampText(lastAbility, 18), absorbed > 0 and ("  Absorbed: " .. tostring(absorbed)) or "")
 		overlay.HealthLabel.Text = string.format("HP: %d / %d", health, maxHealth)
 		overlay.HitLabel.Text = hitActive and string.format("HIT %s (%s)", tostring(hitDamage), _clampText(hitSource or "Unknown", 18)) or ""

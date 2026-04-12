@@ -11,6 +11,7 @@ CrosshairController.Name = "CrosshairController"
 CrosshairController.Dependencies = {
 	"CombatController",
 	"CameraInputController",
+	"FirearmPresentationController",
 	"RoundController",
 }
 
@@ -106,27 +107,48 @@ function CrosshairController:_refresh()
 	local inRound = roundState and (roundState.Phase == GamePhase.Preparation or roundState.Phase == GamePhase.Reception)
 	local cameraLocked = self.CameraInputController and self.CameraInputController.IsLocked
 	local combatState = self.CombatController and self.CombatController:GetState() or nil
-	local isAimingFirearm = combatState and combatState.WeaponKind == "Firearm" and combatState.IsAiming
-	local show = inRound and cameraLocked and isAimingFirearm
+	local hasFirearmEquipped = combatState and combatState.WeaponKind == "Firearm"
+	local isAimingFirearm = hasFirearmEquipped and combatState.IsAiming
+	local isFirstPerson = self.CameraInputController and self.CameraInputController:IsFirstPerson()
+	local show = inRound and cameraLocked and hasFirearmEquipped
 
 	self.UI.Root.Enabled = show
 	if not show then
 		return
 	end
 
-	local color = Color3.fromRGB(240, 240, 240)
-	local alpha = 0.08
-	local rootPosition = UDim2.fromScale(0.5, 0.5)
-	if isAimingFirearm then
-		color = Color3.fromRGB(103, 194, 255)
-		alpha = 0
-		rootPosition = self:_getProjectedReticlePosition() or rootPosition
-	elseif self.CombatController and self.CombatController:IsRecentHit() then
+	local color = isAimingFirearm and Color3.fromRGB(103, 194, 255) or Color3.fromRGB(240, 240, 240)
+	local alpha = 0
+	local rootPosition = self:_getProjectedReticlePosition() or UDim2.fromScale(0.5, 0.5)
+	if self.CombatController and self.CombatController:IsRecentHit() then
 		color = Color3.fromRGB(124, 214, 166)
-		alpha = 0
 	end
 
+	local weaponDefinition = self.CombatController and self.CombatController:GetEquippedWeaponDefinition() or nil
+	local handling = FirearmAim.GetHandlingData(weaponDefinition)
+	local expansion = self.FirearmPresentationController and self.FirearmPresentationController:GetReticleExpansion() or 0
+	local baseGap = isAimingFirearm
+		and (6 + math.floor((handling.AimSpread or 0.5) * 3))
+		or (8 + math.floor((handling.HipfireSpread or 3.5) * 2))
+	if isFirstPerson then
+		baseGap = math.max(5, baseGap - (isAimingFirearm and 2 or 3))
+	end
+	local gap = baseGap + math.floor(expansion * (isAimingFirearm and 8 or 14))
+	local lineLength = isAimingFirearm and 8 or 10
+	local lineThickness = isAimingFirearm and 2 or 3
+	local rootSize = 24 + (gap * 2) + lineLength
+
 	self.UI.Container.Position = rootPosition
+	self.UI.Container.Size = UDim2.fromOffset(rootSize, rootSize)
+	self.UI.Center.Size = UDim2.fromOffset(isAimingFirearm and 4 or 5, isAimingFirearm and 4 or 5)
+	self.UI.Top.Position = UDim2.new(0.5, 0, 0.5, -gap)
+	self.UI.Top.Size = UDim2.fromOffset(lineThickness, lineLength)
+	self.UI.Bottom.Position = UDim2.new(0.5, 0, 0.5, gap)
+	self.UI.Bottom.Size = UDim2.fromOffset(lineThickness, lineLength)
+	self.UI.Left.Position = UDim2.new(0.5, -gap, 0.5, 0)
+	self.UI.Left.Size = UDim2.fromOffset(lineLength, lineThickness)
+	self.UI.Right.Position = UDim2.new(0.5, gap, 0.5, 0)
+	self.UI.Right.Size = UDim2.fromOffset(lineLength, lineThickness)
 
 	for _, key in ipairs({ "Center", "Top", "Bottom", "Left", "Right" }) do
 		self.UI[key].BackgroundColor3 = color

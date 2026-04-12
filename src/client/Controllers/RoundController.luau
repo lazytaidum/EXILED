@@ -1,14 +1,17 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local RoundController = {}
 RoundController.Name = "RoundController"
 
 function RoundController:Init()
+	local defaultPhase = WorldModeResolver.IsWeaponLab() and GamePhase.Preparation or "Unknown"
 	self.CurrentState = {
-		Phase = "Unknown",
+		Phase = defaultPhase,
 		TimeLeft = 0,
 		Outcome = "None",
 	}

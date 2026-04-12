@@ -1,12 +1,12 @@
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local Debris = game:GetService("Debris")
-local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local ActionName = require(ReplicatedStorage.Shared.Enums.ActionName)
 local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local ItemDefinitions = require(ReplicatedStorage.Shared.Data.ItemDefinitions)
+local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local CombatController = {}
@@ -16,11 +16,11 @@ CombatController.Dependencies = {
 	"BreathHoldController",
 }
 
-local SLOT_HEIGHT = 24
+local SLOT_HEIGHT = 54
 local SLOT_PADDING = 6
-local SLOT_WIDTH = 102
-local BASE_CONTAINER_OFFSET_Y = -24
-local SLOT_STACK_GAP = 10
+local SLOT_WIDTH = 150
+local BASE_CONTAINER_OFFSET_Y = -18
+local SLOT_STACK_GAP = 12
 
 function CombatController:Init()
 	self.PlayerGui = self.World.PlayerGui
@@ -32,7 +32,6 @@ function CombatController:Init()
 	self.RequestUseInventoryItemRemote = self.Remotes:WaitForChild(RemoteNames.RequestUseInventoryItem)
 	self.CombatStateChangedRemote = self.Remotes:WaitForChild(RemoteNames.CombatStateChanged)
 	self.CombatHitConfirmedRemote = self.Remotes:WaitForChild(RemoteNames.CombatHitConfirmed)
-	self.CombatShotVisualRemote = self.Remotes:WaitForChild(RemoteNames.CombatShotVisual)
 	self.State = {
 		EquippedWeaponId = nil,
 		EquippedSlot = 1,
@@ -73,10 +72,6 @@ function CombatController:Start()
 		self.LastHitAt = os.clock()
 		self.LastHitTargetName = payload and payload.TargetName or "Entity"
 		self:_refreshUi()
-	end)
-
-	self.CombatShotVisualRemote.OnClientEvent:Connect(function(payload)
-		self:_showShotVisual(payload)
 	end)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
@@ -139,13 +134,10 @@ function CombatController:Start()
 			return
 		end
 
-		if self.State.WeaponKind == "Firearm" and not self.State.IsAiming then
-			return
-		end
-
 		self.RequestPrimaryAttackRemote:FireServer({
 			Origin = self.World.Camera.CFrame.Position,
 			Direction = self.World.Camera.CFrame.LookVector,
+			IsAiming = self.State.IsAiming == true,
 		})
 	end)
 
@@ -197,52 +189,6 @@ function CombatController:_releaseAim()
 	self.RequestMovementStateRemote:FireServer(ActionName.Aim, false)
 end
 
-function CombatController:_showShotVisual(payload)
-	if type(payload) ~= "table" or typeof(payload.Origin) ~= "Vector3" or typeof(payload.EndPosition) ~= "Vector3" then
-		return
-	end
-
-	local origin = payload.Origin
-	local endPosition = payload.EndPosition
-	local direction = endPosition - origin
-	local distance = direction.Magnitude
-	if distance <= 0.05 then
-		return
-	end
-
-	local tracer = Instance.new("Part")
-	tracer.Name = "DebugShotTracer"
-	tracer.Anchored = true
-	tracer.CanCollide = false
-	tracer.CanQuery = false
-	tracer.CanTouch = false
-	tracer.CastShadow = false
-	tracer.Material = Enum.Material.Neon
-	tracer.Color = payload.Hit and Color3.fromRGB(124, 214, 166) or Color3.fromRGB(103, 194, 255)
-	tracer.Transparency = 0.02
-	tracer.Size = Vector3.new(0.22, 0.22, distance)
-	tracer.CFrame = CFrame.lookAt(origin, endPosition) * CFrame.new(0, 0, -(distance * 0.5))
-	tracer.Parent = Workspace
-
-	local impact = Instance.new("Part")
-	impact.Name = "DebugShotImpact"
-	impact.Anchored = true
-	impact.CanCollide = false
-	impact.CanQuery = false
-	impact.CanTouch = false
-	impact.CastShadow = false
-	impact.Material = Enum.Material.Neon
-	impact.Shape = Enum.PartType.Ball
-	impact.Color = tracer.Color
-	impact.Transparency = 0.08
-	impact.Size = Vector3.new(0.45, 0.45, 0.45)
-	impact.Position = endPosition
-	impact.Parent = Workspace
-
-	Debris:AddItem(tracer, 0.18)
-	Debris:AddItem(impact, 0.18)
-end
-
 function CombatController:_canAim()
 	return self.State.WeaponKind == "Firearm"
 		and not self.State.IsBroken
@@ -253,6 +199,37 @@ end
 
 function CombatController:GetState()
 	return self.State
+end
+
+function CombatController:GetEquippedWeaponDefinition()
+	if not self.State or not self.State.EquippedWeaponId then
+		return nil
+	end
+
+	return WeaponDefinitions[self.State.EquippedWeaponId]
+end
+
+function CombatController:GetEquippedEntryState()
+	if not self.State or not self.State.Weapons then
+		return nil
+	end
+
+	return self.State.Weapons[self.State.EquippedSlot or 1]
+end
+
+function CombatController:GetEquippedDefinition()
+	local entry = self:GetEquippedEntryState()
+	if not entry then
+		return nil
+	end
+
+	if entry.EntryType == "Weapon" then
+		return WeaponDefinitions[entry.WeaponId]
+	elseif entry.EntryType == "Item" then
+		return ItemDefinitions[entry.WeaponId]
+	end
+
+	return nil
 end
 
 function CombatController:IsRecentHit()
@@ -318,9 +295,9 @@ function CombatController:_createUI()
 
 	local container = Instance.new("Frame")
 	container.Name = "Container"
-	container.AnchorPoint = Vector2.new(0, 1)
-	container.Position = UDim2.new(0, 24, 1, BASE_CONTAINER_OFFSET_Y)
-	container.Size = UDim2.new(0, 210, 0, 62)
+	container.AnchorPoint = Vector2.new(1, 1)
+	container.Position = UDim2.new(1, -12, 1, BASE_CONTAINER_OFFSET_Y)
+	container.Size = UDim2.new(0, 170, 0, 82)
 	container.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
 	container.BackgroundTransparency = 0.08
 	container.BorderSizePixel = 0
@@ -332,49 +309,49 @@ function CombatController:_createUI()
 
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Name = "NameLabel"
-	nameLabel.Position = UDim2.new(0, 12, 0, 8)
+	nameLabel.Position = UDim2.new(0, 12, 0, 10)
 	nameLabel.Size = UDim2.new(1, -24, 0, 18)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 15
+	nameLabel.TextSize = 14
 	nameLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Center
 	nameLabel.Text = "Bushman Knife"
 	nameLabel.Parent = container
 
 	local durabilityLabel = Instance.new("TextLabel")
 	durabilityLabel.Name = "DurabilityLabel"
-	durabilityLabel.Position = UDim2.new(0, 12, 0, 28)
-	durabilityLabel.Size = UDim2.new(0.55, 0, 0, 16)
+	durabilityLabel.Position = UDim2.new(0, 12, 0, 30)
+	durabilityLabel.Size = UDim2.new(1, -24, 0, 14)
 	durabilityLabel.BackgroundTransparency = 1
 	durabilityLabel.Font = Enum.Font.Gotham
-	durabilityLabel.TextSize = 12
+	durabilityLabel.TextSize = 11
 	durabilityLabel.TextColor3 = Color3.fromRGB(197, 197, 204)
-	durabilityLabel.TextXAlignment = Enum.TextXAlignment.Left
+	durabilityLabel.TextXAlignment = Enum.TextXAlignment.Center
 	durabilityLabel.Text = "Durability 10/10"
 	durabilityLabel.Parent = container
 
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "StatusLabel"
-	statusLabel.Position = UDim2.new(1, -74, 0, 28)
-	statusLabel.Size = UDim2.new(0, 62, 0, 16)
+	statusLabel.Position = UDim2.new(0, 12, 0, 46)
+	statusLabel.Size = UDim2.new(1, -24, 0, 14)
 	statusLabel.BackgroundTransparency = 1
 	statusLabel.Font = Enum.Font.GothamBold
 	statusLabel.TextSize = 12
 	statusLabel.TextColor3 = Color3.fromRGB(214, 180, 64)
-	statusLabel.TextXAlignment = Enum.TextXAlignment.Right
+	statusLabel.TextXAlignment = Enum.TextXAlignment.Center
 	statusLabel.Text = "READY"
 	statusLabel.Parent = container
 
 	local hitLabel = Instance.new("TextLabel")
 	hitLabel.Name = "HitLabel"
-	hitLabel.Position = UDim2.new(0, 12, 0, 44)
+	hitLabel.Position = UDim2.new(0, 12, 0, 60)
 	hitLabel.Size = UDim2.new(1, -24, 0, 14)
 	hitLabel.BackgroundTransparency = 1
 	hitLabel.Font = Enum.Font.Gotham
-	hitLabel.TextSize = 11
+	hitLabel.TextSize = 10
 	hitLabel.TextColor3 = Color3.fromRGB(164, 224, 176)
-	hitLabel.TextXAlignment = Enum.TextXAlignment.Left
+	hitLabel.TextXAlignment = Enum.TextXAlignment.Center
 	hitLabel.Text = ""
 	hitLabel.Parent = container
 
@@ -403,8 +380,8 @@ function CombatController:_createUI()
 
 	local slotsFrame = Instance.new("Frame")
 	slotsFrame.Name = "SlotsFrame"
-	slotsFrame.AnchorPoint = Vector2.new(0, 1)
-	slotsFrame.Position = UDim2.new(0, 0, 0, -SLOT_STACK_GAP)
+	slotsFrame.AnchorPoint = Vector2.new(1, 1)
+	slotsFrame.Position = UDim2.new(1, 0, 0, -(SLOT_STACK_GAP + 8))
 	slotsFrame.Size = UDim2.new(0, SLOT_WIDTH, 0, 0)
 	slotsFrame.BackgroundTransparency = 1
 	slotsFrame.Parent = container
@@ -455,13 +432,13 @@ function CombatController:_refreshSlots()
 
 			local keyBadge = Instance.new("TextLabel")
 			keyBadge.Name = "KeyBadge"
-			keyBadge.Position = UDim2.new(0, 4, 0, 4)
-			keyBadge.Size = UDim2.new(0, 14, 0, 14)
+			keyBadge.Position = UDim2.new(0, 8, 0, 8)
+			keyBadge.Size = UDim2.new(0, 20, 0, 20)
 			keyBadge.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
 			keyBadge.BackgroundTransparency = 0.08
 			keyBadge.BorderSizePixel = 0
 			keyBadge.Font = Enum.Font.GothamBold
-			keyBadge.TextSize = 9
+			keyBadge.TextSize = 11
 			keyBadge.TextColor3 = Color3.fromRGB(20, 22, 28)
 			keyBadge.Text = tostring(index)
 			keyBadge.Parent = slotButton
@@ -472,12 +449,13 @@ function CombatController:_refreshSlots()
 
 			local nameLabel = Instance.new("TextLabel")
 			nameLabel.Name = "NameLabel"
-			nameLabel.Position = UDim2.new(0, 20, 0, 0)
-			nameLabel.Size = UDim2.new(1, -24, 1, 0)
+			nameLabel.Position = UDim2.new(0, 36, 0, 0)
+			nameLabel.Size = UDim2.new(1, -44, 1, 0)
 			nameLabel.BackgroundTransparency = 1
 			nameLabel.Font = Enum.Font.GothamBold
-			nameLabel.TextSize = 10
+			nameLabel.TextSize = 11
 			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.TextWrapped = true
 			nameLabel.Parent = slotButton
 
 			self.UI.SlotButtons[index] = slotButton
@@ -510,7 +488,7 @@ function CombatController:_refreshSlots()
 	local visibleSlotCount = #(self.State.Weapons or {})
 	local slotsHeight = visibleSlotCount > 0 and ((visibleSlotCount * SLOT_HEIGHT) + (math.max(0, visibleSlotCount - 1) * SLOT_PADDING)) or 0
 	slotsFrame.Size = UDim2.new(0, SLOT_WIDTH, 0, slotsHeight)
-	slotsFrame.Position = UDim2.new(0, 0, 0, -SLOT_STACK_GAP)
+	slotsFrame.Position = UDim2.new(1, 0, 0, -SLOT_STACK_GAP)
 end
 
 function CombatController:_refreshUi()

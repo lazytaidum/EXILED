@@ -8,6 +8,7 @@ local ActionToken = {
 	RadialMenu = "RadialMenu",
 	Reload = "Reload",
 	Flashlight = "Flashlight",
+	TogglePerspective = "TogglePerspective",
 
 	Ability1 = "Ability1",
 	Ability2 = "Ability2",

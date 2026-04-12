@@ -13,6 +13,7 @@ InputController.Dependencies = {
 	"QTEController",
 	"BreathHoldController",
 	"RemnantController",
+	"CameraInputController",
 }
 
 function InputController:Init()
@@ -140,6 +141,11 @@ function InputController:_handleKeyboardInput(keyCode, isPressed)
 				self.RemnantController:TriggerAbility("Ability3")
 			else
 				self.RequestRemnantAbilityRemote:FireServer("Ability3")
+			end
+		elseif actionToken == ActionToken.TogglePerspective and isPressed then
+			DebugLog:Log("ClientMovement", "[InputController] Toggle perspective pressed")
+			if self.CameraInputController then
+				self.CameraInputController:TogglePerspective()
 			end
 		end
 	end

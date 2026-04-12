@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
 
 local ClientWorld = {}
 ClientWorld.__index = ClientWorld
@@ -14,6 +15,7 @@ function ClientWorld.new(controllers)
 	self.Camera = Workspace.CurrentCamera
 	self.Shared = ReplicatedStorage:WaitForChild("Shared")
 	self.Remotes = self.Shared:WaitForChild("Remotes")
+	self.WorldMode = WorldModeResolver.GetWorldMode()
 
 	return self
 end
@@ -25,6 +27,10 @@ end
 
 function ClientWorld:GetCharacter()
 	return self.Player.Character
+end
+
+function ClientWorld:GetWorldMode()
+	return self.WorldMode
 end
 
 function ClientWorld:GetRoundState()

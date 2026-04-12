@@ -1,3 +1,6 @@
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
+
 local ServerWorld = {}
 ServerWorld.__index = ServerWorld
 
@@ -11,6 +14,7 @@ function ServerWorld.new(services)
 	self.StatusEffectService = services.StatusEffectService
 	self.InteractionService = services.InteractionService
 	self.ObjectiveService = services.ObjectiveService
+	self.WorldMode = WorldModeResolver.GetWorldMode()
 
 	return self
 end
@@ -25,6 +29,10 @@ end
 
 function ServerWorld:GetActivePlayers()
 	return self.RoundManager and self.RoundManager:GetActivePlayers() or {}
+end
+
+function ServerWorld:GetWorldMode()
+	return self.WorldMode
 end
 
 function ServerWorld:ApplyStatus(target, statusId, params)

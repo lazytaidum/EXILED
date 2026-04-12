@@ -80,6 +80,14 @@ function InventoryService:ResetPlayerInventory(player)
 	}
 end
 
+function InventoryService:CreateWeaponEntry(weaponId)
+	return _createWeaponEntry(weaponId)
+end
+
+function InventoryService:CreateItemEntry(itemId, count)
+	return _createItemEntry(itemId, count)
+end
+
 function InventoryService:GetInventory(player)
 	return self.PlayerInventories[player]
 end
@@ -128,6 +136,24 @@ function InventoryService:AddItem(player, itemId, count)
 
 	table.insert(inventory.Entries, _createItemEntry(itemId, amount))
 	return #inventory.Entries
+end
+
+function InventoryService:SetWeaponLoadout(player, weaponIds)
+	local inventory = self.PlayerInventories[player]
+	if not inventory then
+		self:ResetPlayerInventory(player)
+		inventory = self.PlayerInventories[player]
+	end
+
+	inventory.Entries = {}
+	for _, weaponId in ipairs(weaponIds or {}) do
+		local entry = _createWeaponEntry(weaponId)
+		if entry then
+			table.insert(inventory.Entries, entry)
+		end
+	end
+
+	return inventory.Entries
 end
 
 function InventoryService:ConsumeItem(player, slotIndex, amount)

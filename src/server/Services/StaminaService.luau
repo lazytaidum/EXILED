@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local StaminaService = {}
@@ -27,7 +28,15 @@ end
 
 function StaminaService:_isMovementPhaseActive(character)
 	local roundManager = self.RoundManager
-	if not roundManager or not character or not character:IsAlive() then
+	if not character or not character:IsAlive() then
+		return false
+	end
+
+	if WorldModeResolver.IsWeaponLab() then
+		return true
+	end
+
+	if not roundManager then
 		return false
 	end
 

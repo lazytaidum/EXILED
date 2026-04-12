@@ -21,7 +21,7 @@ local DefaultKeybinds = {
 		Z = { ActionToken.Perk1 },
 		X = { ActionToken.Perk2 },
 		C = { ActionToken.Perk3 },
-		V = { ActionToken.Perk4 },
+		V = { ActionToken.TogglePerspective },
 	},
 
 	Mouse = {

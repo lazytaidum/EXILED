@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ServerStorage = game:GetService("ServerStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local Debris = game:GetService("Debris")
 
 local BaseEntity = require(ServerScriptService.Server.Classes.BaseEntity)
 local DebugFlags = require(ReplicatedStorage.Shared.Data.DebugFlags)
@@ -487,7 +488,7 @@ function EntityService:_tickEntityPassives(entity, deltaTime)
 			continue
 		end
 
-		local context = self:_createEffectContext(entity, entity:GetTarget(), nil, deltaTime)
+		local context = self:_createEffectContext(entity, entity:GetTarget(), nil, deltaTime, passive)
 		self:_executeEffectSteps(entity, passive, context)
 		entity:SetCooldown(cooldownKey, tickInterval)
 	end
@@ -528,6 +529,7 @@ function EntityService:_tryUseAbility(entity, candidates)
 	end
 
 	local targetPlayer = self:_selectAbilityTarget(entity, ability, candidates)
+	self:_playEntityAbilityCastVisual(entity, abilityId, targetPlayer)
 	entity:BeginCast(abilityId, ability, targetPlayer)
 	entity:SetCooldown(abilityId, ability.Cooldown or 0)
 
@@ -813,8 +815,9 @@ function EntityService:_selectAbilityTarget(entity, ability, candidates)
 end
 
 function EntityService:_resolveAbility(entity, ability, targetPlayer)
-	local context = self:_createEffectContext(entity, targetPlayer, nil, nil)
+	local context = self:_createEffectContext(entity, targetPlayer, nil, nil, ability)
 	self:_executeEffectSteps(entity, ability, context)
+	self:_playEntityAbilityResolveVisual(entity, ability.Id, targetPlayer)
 
 	DebugLog:Log("Entity", string.format("[EntityService] %s resolved %s", entity.DisplayName, ability.Id or "Ability"))
 	self:_syncDebugAttributes(entity)
@@ -1278,12 +1281,13 @@ function EntityService:_executeBasicAttackEffects(entity, targetPlayer, attackDe
 	end
 end
 
-function EntityService:_createEffectContext(entity, targetPlayer, sourceStep, deltaTime)
+function EntityService:_createEffectContext(entity, targetPlayer, sourceStep, deltaTime, definition)
 	return {
 		Entity = entity,
 		TargetPlayer = targetPlayer,
 		SourceStep = sourceStep,
 		DeltaTime = deltaTime,
+		Definition = definition,
 	}
 end
 
@@ -1690,7 +1694,10 @@ function EntityService:_startStruggleFromEffect(entity, step, context)
 				end
 			elseif self:_canResolveStruggleTarget(entity, targetCharacter, step) then
 				self:_applyStruggleLunge(entity, targetCharacter, step)
-				self.StruggleService:BeginStruggle(entity, target, struggleParams)
+				local started = self.StruggleService:BeginStruggle(entity, target, struggleParams)
+				if started and context and context.Definition and context.Definition.Id == "SeekingWisdom" then
+					self:_playStruggleLatchVisual(entity, targetCharacter)
+				end
 			end
 		end
 	end
@@ -2010,6 +2017,158 @@ function EntityService:_showEntityAbilityVisual(visualType, payload)
 	end
 
 	self.EntityAbilityVisualRemote:FireAllClients(finalPayload)
+end
+
+function EntityService:_createTemporaryAbilityPart(properties, duration)
+	local part = Instance.new("Part")
+	part.Name = properties.Name or "EntityAbilityVisual"
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Material = properties.Material or Enum.Material.Neon
+	part.Color = properties.Color or Color3.fromRGB(255, 206, 143)
+	part.Transparency = properties.Transparency or 0.15
+	part.Size = properties.Size or Vector3.new(1, 1, 1)
+	part.Shape = properties.Shape or Enum.PartType.Ball
+	part.CFrame = properties.CFrame or CFrame.new()
+	part.Parent = Workspace
+
+	Debris:AddItem(part, duration or 0.25)
+	return part
+end
+
+function EntityService:_spawnEntityPulseRing(position, color, startRadius, endRadius, duration, yOffset, thickness)
+	local ring = self:_createTemporaryAbilityPart({
+		Name = "EntityAbilityRing",
+		Shape = Enum.PartType.Cylinder,
+		Size = Vector3.new(thickness or 0.12, startRadius * 2, startRadius * 2),
+		CFrame = CFrame.new(position + Vector3.new(0, yOffset or 0, 0)) * CFrame.Angles(0, 0, math.rad(90)),
+		Color = color,
+		Material = Enum.Material.ForceField,
+		Transparency = 0.15,
+	}, duration)
+
+	local startedAt = os.clock()
+	task.spawn(function()
+		while ring and ring.Parent do
+			local alpha = math.clamp((os.clock() - startedAt) / duration, 0, 1)
+			local radius = startRadius + ((endRadius - startRadius) * alpha)
+			ring.Size = Vector3.new(thickness or 0.12, radius * 2, radius * 2)
+			ring.Transparency = 0.15 + (alpha * 0.8)
+			task.wait()
+		end
+	end)
+end
+
+function EntityService:_spawnEntityBurst(position, color, startSize, endSize, duration)
+	local burst = self:_createTemporaryAbilityPart({
+		Name = "EntityAbilityBurst",
+		Shape = Enum.PartType.Ball,
+		Size = Vector3.new(startSize, startSize, startSize),
+		CFrame = CFrame.new(position),
+		Color = color,
+		Transparency = 0.08,
+	}, duration)
+
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Range = endSize * 2
+	light.Brightness = 2.5
+	light.Parent = burst
+
+	local startedAt = os.clock()
+	task.spawn(function()
+		while burst and burst.Parent do
+			local alpha = math.clamp((os.clock() - startedAt) / duration, 0, 1)
+			local size = startSize + ((endSize - startSize) * alpha)
+			burst.Size = Vector3.new(size, size, size)
+			burst.Transparency = 0.08 + (alpha * 0.86)
+			light.Brightness = 2.5 * (1 - alpha)
+			task.wait()
+		end
+	end)
+end
+
+function EntityService:_spawnEntityBeamLine(startPosition, endPosition, color, width, duration)
+	local offset = endPosition - startPosition
+	local distance = offset.Magnitude
+	if distance <= 0.05 then
+		return
+	end
+
+	self:_createTemporaryAbilityPart({
+		Name = "EntityAbilityBeam",
+		Size = Vector3.new(width or 0.2, width or 0.2, distance),
+		CFrame = CFrame.lookAt(startPosition, endPosition) * CFrame.new(0, 0, -(distance * 0.5)),
+		Color = color,
+		Transparency = 0.12,
+	}, duration)
+end
+
+function EntityService:_playEntityAbilityCastVisual(entity, abilityId, targetPlayer)
+	if not entity or not entity.RootPart or entity.Id ~= "SearchingForWisdom" then
+		return
+	end
+
+	local rootPosition = entity.RootPart.Position
+	local targetCharacter = targetPlayer and self.CharacterService:GetCharacterByPlayer(targetPlayer)
+	local targetPosition = targetCharacter and targetCharacter.RootPart and targetCharacter.RootPart.Position or nil
+
+	if abilityId == "RakingWisdom" then
+		self:_spawnEntityBurst(rootPosition + Vector3.new(0, 2.4, 0), Color3.fromRGB(214, 132, 94), 0.8, 3.2, 0.18)
+		self:_spawnEntityPulseRing(rootPosition, Color3.fromRGB(178, 96, 76), 2.5, 12, 0.35, -2.8, 0.1)
+		if targetPosition then
+			local planarTarget = Vector3.new(targetPosition.X, rootPosition.Y, targetPosition.Z)
+			self:_spawnEntityBeamLine(rootPosition + Vector3.new(0, 0.8, 0), planarTarget, Color3.fromRGB(191, 102, 76), 0.16, 0.18)
+		end
+	elseif abilityId == "SeekingWisdom" then
+		self:_spawnEntityBurst(rootPosition + Vector3.new(0, 3.3, 0), Color3.fromRGB(236, 220, 162), 0.6, 2.4, 0.22)
+		self:_spawnEntityPulseRing(rootPosition, Color3.fromRGB(184, 154, 104), 1.5, 7.5, 0.28, -2.8, 0.08)
+		if targetPosition then
+			self:_spawnEntityBeamLine(rootPosition + Vector3.new(0, 3.2, 0), targetPosition + Vector3.new(0, 1.8, 0), Color3.fromRGB(222, 206, 142), 0.12, 0.22)
+		end
+	elseif abilityId == "Harvest" then
+		self:_spawnEntityBurst(rootPosition + Vector3.new(0, 1.6, 0), Color3.fromRGB(205, 88, 88), 0.9, 3.8, 0.2)
+		self:_spawnEntityPulseRing(rootPosition, Color3.fromRGB(166, 64, 64), 2.2, 9.5, 0.3, -2.8, 0.1)
+		if targetPosition then
+			local planarTarget = Vector3.new(targetPosition.X, rootPosition.Y, targetPosition.Z)
+			self:_spawnEntityBeamLine(rootPosition + Vector3.new(0, 1.1, 0), planarTarget, Color3.fromRGB(202, 96, 96), 0.18, 0.16)
+		end
+	end
+end
+
+function EntityService:_playEntityAbilityResolveVisual(entity, abilityId, targetPlayer)
+	if not entity or entity.Id ~= "SearchingForWisdom" then
+		return
+	end
+
+	local targetCharacter = targetPlayer and self.CharacterService:GetCharacterByPlayer(targetPlayer)
+	local targetPosition = targetCharacter and targetCharacter.RootPart and targetCharacter.RootPart.Position or nil
+	if not targetPosition then
+		return
+	end
+
+	if abilityId == "RakingWisdom" then
+		self:_spawnEntityBurst(targetPosition + Vector3.new(0, 2.1, 0), Color3.fromRGB(198, 88, 72), 0.7, 2.6, 0.18)
+		self:_spawnEntityPulseRing(targetPosition, Color3.fromRGB(188, 92, 74), 1.5, 6, 0.24, -2.8, 0.08)
+	elseif abilityId == "Harvest" then
+		self:_spawnEntityBurst(targetPosition + Vector3.new(0, 1.6, 0), Color3.fromRGB(224, 96, 96), 1.1, 4.4, 0.22)
+		self:_spawnEntityPulseRing(targetPosition, Color3.fromRGB(176, 62, 62), 2.2, 7.5, 0.28, -2.8, 0.12)
+	end
+end
+
+function EntityService:_playStruggleLatchVisual(entity, targetCharacter)
+	if not entity or entity.Id ~= "SearchingForWisdom" or not entity.RootPart or not targetCharacter or not targetCharacter.RootPart then
+		return
+	end
+
+	local origin = entity.RootPart.Position + Vector3.new(0, 3.1, 0)
+	local targetPosition = targetCharacter.RootPart.Position + Vector3.new(0, 1.8, 0)
+	self:_spawnEntityBeamLine(origin, targetPosition, Color3.fromRGB(236, 218, 164), 0.16, 0.32)
+	self:_spawnEntityBurst(targetPosition, Color3.fromRGB(240, 226, 178), 0.55, 2.1, 0.18)
+	self:_spawnEntityPulseRing(targetCharacter.RootPart.Position, Color3.fromRGB(212, 190, 132), 1.2, 4.4, 0.22, -1.8, 0.08)
 end
 
 function EntityService:_spawnStruggleLungeDebugVisual(startPosition, targetPosition, contactRadius)

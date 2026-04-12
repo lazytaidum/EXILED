@@ -15,6 +15,7 @@ DevMenuController.Name = "DevMenuController"
 DevMenuController.Dependencies = {
 	"EntityDebugController",
 	"InteractableDebugController",
+	"ViewmodelController",
 }
 
 local TOGGLE_KEY = Enum.KeyCode.RightShift
@@ -321,7 +322,7 @@ function DevMenuController:_createUI()
 	frame.Name = "Panel"
 	frame.AnchorPoint = Vector2.new(0, 0.5)
 	frame.Position = UDim2.new(0, 18, 0.5, 0)
-	frame.Size = UDim2.new(0, 280, 0, 494)
+	frame.Size = UDim2.new(0, 280, 0, 648)
 	frame.BackgroundColor3 = Color3.fromRGB(18, 19, 24)
 	frame.BackgroundTransparency = 0.08
 	frame.BorderSizePixel = 0
@@ -544,6 +545,93 @@ function DevMenuController:_createUI()
 	end)
 	debugUiButton.Name = "DebugUiButton"
 
+	self:_createSectionLabel(frame, "Viewmodel Lab", 492)
+	local labStatus = Instance.new("TextLabel")
+	labStatus.Name = "LabStatus"
+	labStatus.BackgroundTransparency = 1
+	labStatus.Position = UDim2.new(0, 12, 0, 510)
+	labStatus.Size = UDim2.new(1, -24, 0, 16)
+	labStatus.Font = Enum.Font.Gotham
+	labStatus.TextSize = 11
+	labStatus.TextColor3 = Color3.fromRGB(190, 194, 206)
+	labStatus.TextXAlignment = Enum.TextXAlignment.Left
+	labStatus.Parent = frame
+
+	local labToggleButton = self:_createButton(frame, "Enable Lab", UDim2.new(0, 12, 0, 532), UDim2.new(0, 124, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.SetLabEnabled then
+			self.ViewmodelController:SetLabEnabled(not self.ViewmodelController:IsLabEnabled())
+			self:_refreshUi()
+		end
+	end)
+	labToggleButton.Name = "LabToggleButton"
+
+	local labFreezeButton = self:_createButton(frame, "Freeze Lab", UDim2.new(0, 144, 0, 532), UDim2.new(0, 124, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.SetLabFrozen then
+			self.ViewmodelController:SetLabFrozen(not self.ViewmodelController:IsLabFrozen())
+			self:_refreshUi()
+		end
+	end)
+	labFreezeButton.Name = "LabFreezeButton"
+
+	local labUseSelectedButton = self:_createButton(frame, "Use Selected", UDim2.new(0, 12, 0, 558), UDim2.new(0, 124, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.SetLabWeapon then
+			local selectedWeaponId = self:_getSelectedWeaponId()
+			if selectedWeaponId then
+				self.ViewmodelController:SetLabWeapon(selectedWeaponId)
+				self:_refreshUi()
+			end
+		end
+	end)
+	labUseSelectedButton.Name = "LabUseSelectedButton"
+
+	local labUseLiveButton = self:_createButton(frame, "Use Live", UDim2.new(0, 144, 0, 558), UDim2.new(0, 124, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.ClearLabWeapon then
+			self.ViewmodelController:ClearLabWeapon()
+			self:_refreshUi()
+		end
+	end)
+	labUseLiveButton.Name = "LabUseLiveButton"
+
+	local labShowLiveButton = self:_createButton(frame, "Show Live Rig", UDim2.new(0, 12, 0, 584), UDim2.new(0, 256, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.SetLabShowSourceRig then
+			self.ViewmodelController:SetLabShowSourceRig(not self.ViewmodelController:IsLabShowingSourceRig())
+			self:_refreshUi()
+		end
+	end)
+	labShowLiveButton.Name = "LabShowLiveButton"
+
+	local idleButton = self:_createButton(frame, "Idle", UDim2.new(0, 12, 0, 610), UDim2.new(0, 58, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.PreviewLabAction then
+			self.ViewmodelController:PreviewLabAction("Idle")
+			self:_refreshUi()
+		end
+	end)
+	idleButton.Name = "LabIdleButton"
+
+	local aimButton = self:_createButton(frame, "Aim", UDim2.new(0, 78, 0, 610), UDim2.new(0, 58, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.PreviewLabAction then
+			self.ViewmodelController:PreviewLabAction("Aim")
+			self:_refreshUi()
+		end
+	end)
+	aimButton.Name = "LabAimButton"
+
+	local fireButton = self:_createButton(frame, "Fire", UDim2.new(0, 144, 0, 610), UDim2.new(0, 58, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.PreviewLabAction then
+			self.ViewmodelController:PreviewLabAction("Fire")
+			self:_refreshUi()
+		end
+	end)
+	fireButton.Name = "LabFireButton"
+
+	local reloadButton = self:_createButton(frame, "Reload", UDim2.new(0, 210, 0, 610), UDim2.new(0, 58, 0, 22), function()
+		if self.ViewmodelController and self.ViewmodelController.PreviewLabAction then
+			self.ViewmodelController:PreviewLabAction("Reload")
+			self:_refreshUi()
+		end
+	end)
+	reloadButton.Name = "LabReloadButton"
+
 	launcher.MouseButton1Click:Connect(function()
 		self:_toggleVisible()
 	end)
@@ -562,6 +650,16 @@ function DevMenuController:_createUI()
 		EscapeButton = escapeButton,
 		GodModeButton = godButton,
 		DebugUiButton = debugUiButton,
+		LabStatus = labStatus,
+		LabToggleButton = labToggleButton,
+		LabFreezeButton = labFreezeButton,
+		LabUseSelectedButton = labUseSelectedButton,
+		LabUseLiveButton = labUseLiveButton,
+		LabShowLiveButton = labShowLiveButton,
+		LabIdleButton = idleButton,
+		LabAimButton = aimButton,
+		LabFireButton = fireButton,
+		LabReloadButton = reloadButton,
 	}
 end
 
@@ -592,6 +690,25 @@ function DevMenuController:_refreshUi()
 	self.UI.GodModeButton.BackgroundColor3 = self.DevState.GodMode and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
 	self.UI.DebugUiButton.Text = (self.DevState.DebugUiEnabled ~= false and "Disable Debug UI" or "Enable Debug UI")
 	self.UI.DebugUiButton.BackgroundColor3 = (self.DevState.DebugUiEnabled ~= false) and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
+
+	local labStatus = self.ViewmodelController and self.ViewmodelController.GetLabStatus and self.ViewmodelController:GetLabStatus() or nil
+	local labEnabled = labStatus and labStatus.Enabled == true
+	local labFrozen = labStatus and labStatus.Frozen == true
+	local loopAction = labStatus and labStatus.LoopAction or "Idle"
+	local lastAction = labStatus and labStatus.LastAction or "Idle"
+	local labWeaponId = labStatus and labStatus.WeaponId or nil
+	local labSnapshotWeaponId = labStatus and labStatus.SnapshotWeaponId or nil
+	local labShowSourceRig = labStatus and labStatus.ShowSourceRig == true
+	local labWeaponLabel = labWeaponId or labSnapshotWeaponId or "Live"
+	self.UI.LabStatus.Text = string.format("Lab: %s  |  Freeze: %s  |  Weapon: %s  |  Loop: %s  |  Last: %s", labEnabled and "On" or "Off", labFrozen and "On" or "Off", tostring(labWeaponLabel), tostring(loopAction), tostring(lastAction))
+	self.UI.LabToggleButton.Text = labEnabled and "Disable Lab" or "Enable Lab"
+	self.UI.LabToggleButton.BackgroundColor3 = labEnabled and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
+	self.UI.LabFreezeButton.Text = labFrozen and "Unfreeze Lab" or "Freeze Lab"
+	self.UI.LabFreezeButton.BackgroundColor3 = labFrozen and Color3.fromRGB(168, 57, 57) or Color3.fromRGB(54, 58, 70)
+	self.UI.LabUseSelectedButton.BackgroundColor3 = labWeaponId and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
+	self.UI.LabUseLiveButton.BackgroundColor3 = labWeaponId and Color3.fromRGB(54, 58, 70) or Color3.fromRGB(88, 122, 206)
+	self.UI.LabShowLiveButton.Text = labShowSourceRig and "Hide Live Rig" or "Show Live Rig"
+	self.UI.LabShowLiveButton.BackgroundColor3 = labShowSourceRig and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
 	self:_applyDebugUiState()
 end
 

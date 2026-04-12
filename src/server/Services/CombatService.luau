@@ -7,6 +7,7 @@ local ItemDefinitions = require(ReplicatedStorage.Shared.Data.ItemDefinitions)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local FirearmAim = require(ReplicatedStorage.Shared.Utility.FirearmAim)
 local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
+local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local CombatService = {}
@@ -149,6 +150,15 @@ function CombatService:RefreshCombatState(player)
 	end)
 end
 
+function CombatService:_isCombatEnabled()
+	if WorldModeResolver.IsWeaponLab() then
+		return true
+	end
+
+	local roundManager = self.RoundManager
+	return roundManager ~= nil and roundManager:IsReceptionActive()
+end
+
 function CombatService:ForceStopAim(player)
 	local combatState = self.PlayerCombatStates[player]
 	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
@@ -232,8 +242,7 @@ function CombatService:HandleUseInventoryItem(player, requestedSlot)
 		return false
 	end
 
-	local roundManager = self.RoundManager
-	if roundManager and not roundManager:IsReceptionActive() then
+	if not self:_isCombatEnabled() then
 		return false
 	end
 
@@ -373,8 +382,7 @@ function CombatService:HandlePrimaryAttack(player, attackData)
 		return false
 	end
 
-	local roundManager = self.RoundManager
-	if roundManager and not roundManager:IsReceptionActive() then
+	if not self:_isCombatEnabled() then
 		return false
 	end
 
@@ -386,11 +394,6 @@ function CombatService:HandlePrimaryAttack(player, attackData)
 	local equippedWeaponState = self:_getEquippedWeaponState(player, combatState)
 	local weapon = equippedWeaponState and equippedWeaponState.EntryType == "Weapon" and WeaponDefinitions[equippedWeaponState.ItemId] or nil
 	if not weapon or not equippedWeaponState or (weapon.Kind == "Melee" and equippedWeaponState.Durability <= 0) then
-		self:_syncCombatState(player)
-		return false
-	end
-
-	if weapon.Kind == "Firearm" and not character.IsAiming then
 		self:_syncCombatState(player)
 		return false
 	end
@@ -426,10 +429,12 @@ function CombatService:HandlePrimaryAttack(player, attackData)
 			Origin = shotOrigin or (character.RootPart.Position + Vector3.new(0, 1.5, 0)),
 			EndPosition = shotEndPosition,
 			Hit = hitEntity ~= nil,
+			WeaponId = weapon.Id,
+			IsAiming = type(attackData) == "table" and attackData.IsAiming == true,
 		})
 	end
 	if hitEntity then
-		local didDamage = self.EntityService:DamageEntity(hitEntity, weapon.Damage, {
+		local didDamage = self.EntityService and self.EntityService:DamageEntity(hitEntity, weapon.Damage, {
 			SourcePlayer = player,
 			WeaponId = weapon.Id,
 		})
@@ -457,8 +462,7 @@ function CombatService:HandleReload(player)
 		return false
 	end
 
-	local roundManager = self.RoundManager
-	if roundManager and not roundManager:IsReceptionActive() then
+	if not self:_isCombatEnabled() then
 		return false
 	end
 
@@ -544,7 +548,8 @@ function CombatService:_findAttackTarget(character, weapon)
 	local bestEntity = nil
 	local bestDistance = math.huge
 
-	for _, entity in ipairs(self.EntityService.Entities or {}) do
+	local entityService = self.EntityService
+	for _, entity in ipairs((entityService and entityService.Entities) or {}) do
 		if entity.IsActive and entity.Health > 0 then
 			local entityPosition = entity:GetPosition()
 			if entityPosition then
@@ -569,7 +574,10 @@ function CombatService:_findRangedAttackTarget(character, weapon, attackData)
 	local rootPart = character.RootPart
 	local requestedDirection = type(attackData) == "table" and attackData.Direction or nil
 	local requestedOrigin = type(attackData) == "table" and attackData.Origin or nil
+	local isAiming = type(attackData) == "table" and attackData.IsAiming == true
 	local cameraLookVector = FirearmAim.ResolveLookVector(rootPart.CFrame.LookVector, requestedDirection)
+	local spreadAngle = FirearmAim.GetSpreadAngle(weapon, isAiming)
+	local spreadLookVector = FirearmAim.ApplySpread(cameraLookVector, spreadAngle, Random.new())
 	local raycastParams = RaycastParams.new()
 	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
 	local filter = { character.Model }
@@ -581,7 +589,7 @@ function CombatService:_findRangedAttackTarget(character, weapon, attackData)
 	local cameraOrigin = (typeof(requestedOrigin) == "Vector3" and (requestedOrigin - rootPart.Position).Magnitude <= 30)
 		and requestedOrigin
 		or (rootPart.Position + Vector3.new(0, 2, 0))
-	local aimPoint = FirearmAim.ResolveAimPoint(cameraOrigin, cameraLookVector, weapon.Range or 0, raycastParams, Workspace)
+	local aimPoint = FirearmAim.ResolveAimPoint(cameraOrigin, spreadLookVector, weapon.Range or 0, raycastParams, Workspace)
 	local origin = FirearmAim.GetMuzzleOrigin(rootPart.CFrame, cameraLookVector)
 	local shotDirection = aimPoint - origin
 	if shotDirection.Magnitude <= 0.001 then
@@ -592,7 +600,8 @@ function CombatService:_findRangedAttackTarget(character, weapon, attackData)
 	local result = Workspace:Raycast(origin, normalizedShotDirection * (weapon.Range or 0), raycastParams)
 	if result then
 		shotEndPosition = result.Position
-		for _, entity in ipairs(self.EntityService.Entities or {}) do
+		local entityService = self.EntityService
+		for _, entity in ipairs((entityService and entityService.Entities) or {}) do
 			if entity.IsActive and entity.Health > 0 and entity.Model and result.Instance:IsDescendantOf(entity.Model) then
 				return entity, shotEndPosition, origin
 			end

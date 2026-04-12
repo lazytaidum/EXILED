@@ -60,17 +60,17 @@ function RemnantController:_createUI()
 
 	local root = Instance.new("Frame")
 	root.Name = "Root"
-	root.AnchorPoint = Vector2.new(1, 1)
-	root.Position = UDim2.new(1, -18, 1, -18)
-	root.Size = UDim2.new(0, 230, 0, 116)
+	root.AnchorPoint = Vector2.new(0.5, 1)
+	root.Position = UDim2.new(0.5, 0, 1, -18)
+	root.Size = UDim2.new(0, 340, 0, 130)
 	root.BackgroundTransparency = 1
 	root.Parent = screenGui
 
 	local header = Instance.new("Frame")
 	header.Name = "Header"
-	header.AnchorPoint = Vector2.new(1, 1)
-	header.Position = UDim2.new(1, 0, 0, 34)
-	header.Size = UDim2.new(0, 230, 0, 34)
+	header.AnchorPoint = Vector2.new(0.5, 1)
+	header.Position = UDim2.new(0.5, 0, 0, 38)
+	header.Size = UDim2.new(0, 220, 0, 36)
 	header.BackgroundColor3 = Color3.fromRGB(20, 22, 28)
 	header.BackgroundTransparency = 0.08
 	header.BorderSizePixel = 0
@@ -106,16 +106,16 @@ function RemnantController:_createUI()
 
 	local cards = Instance.new("Frame")
 	cards.Name = "Cards"
-	cards.AnchorPoint = Vector2.new(1, 1)
-	cards.Position = UDim2.new(1, 0, 1, 0)
-	cards.Size = UDim2.new(0, 230, 0, 72)
+	cards.AnchorPoint = Vector2.new(0.5, 1)
+	cards.Position = UDim2.new(0.5, 0, 1, 0)
+	cards.Size = UDim2.new(0, 340, 0, 84)
 	cards.BackgroundTransparency = 1
 	cards.Parent = root
 
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Right
-	layout.Padding = UDim.new(0, 6)
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	layout.Padding = UDim.new(0, 10)
 	layout.Parent = cards
 
 	self.UI = {
@@ -135,7 +135,7 @@ end
 function RemnantController:_createAbilityCard(parent, slotName)
 	local frame = Instance.new("Frame")
 	frame.Name = slotName
-	frame.Size = UDim2.new(0, 72, 1, 0)
+	frame.Size = UDim2.new(0, 106, 1, 0)
 	frame.BackgroundColor3 = Color3.fromRGB(22, 24, 31)
 	frame.BackgroundTransparency = 0.08
 	frame.BorderSizePixel = 0
@@ -148,10 +148,10 @@ function RemnantController:_createAbilityCard(parent, slotName)
 	local key = Instance.new("TextLabel")
 	key.Name = "Key"
 	key.BackgroundTransparency = 1
-	key.Position = UDim2.new(0, 6, 0, 4)
-	key.Size = UDim2.new(0, 18, 0, 12)
+	key.Position = UDim2.new(0, 8, 0, 6)
+	key.Size = UDim2.new(0, 22, 0, 12)
 	key.Font = Enum.Font.GothamBold
-	key.TextSize = 11
+	key.TextSize = 12
 	key.TextColor3 = Color3.fromRGB(255, 231, 122)
 	key.TextXAlignment = Enum.TextXAlignment.Left
 	key.Text = "Q"
@@ -160,10 +160,10 @@ function RemnantController:_createAbilityCard(parent, slotName)
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.BackgroundTransparency = 1
-	title.Position = UDim2.new(0, 6, 0, 18)
-	title.Size = UDim2.new(1, -12, 0, 24)
+	title.Position = UDim2.new(0, 8, 0, 24)
+	title.Size = UDim2.new(1, -16, 0, 34)
 	title.Font = Enum.Font.GothamBold
-	title.TextSize = 11
+	title.TextSize = 12
 	title.TextWrapped = true
 	title.TextYAlignment = Enum.TextYAlignment.Top
 	title.TextColor3 = Color3.fromRGB(235, 239, 246)
@@ -173,12 +173,12 @@ function RemnantController:_createAbilityCard(parent, slotName)
 	local state = Instance.new("TextLabel")
 	state.Name = "State"
 	state.BackgroundTransparency = 1
-	state.Position = UDim2.new(0, 6, 1, -16)
-	state.Size = UDim2.new(1, -12, 0, 12)
+	state.Position = UDim2.new(0, 8, 1, -18)
+	state.Size = UDim2.new(1, -16, 0, 12)
 	state.Font = Enum.Font.Gotham
 	state.TextSize = 10
 	state.TextColor3 = Color3.fromRGB(132, 206, 255)
-	state.TextXAlignment = Enum.TextXAlignment.Left
+	state.TextXAlignment = Enum.TextXAlignment.Center
 	state.Text = "READY"
 	state.Parent = frame
 

@@ -31,6 +31,8 @@ local RemoteNames = {
 	RequestDevCommand = "RequestDevCommand",
 	DevStateChanged = "DevStateChanged",
 	DevPlacementStateChanged = "DevPlacementStateChanged",
+	RequestWeaponLabCommand = "RequestWeaponLabCommand",
+	WeaponLabStateChanged = "WeaponLabStateChanged",
 }
 
 return RemoteNames

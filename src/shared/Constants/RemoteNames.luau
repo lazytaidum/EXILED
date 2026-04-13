@@ -4,6 +4,8 @@ local RemoteNames = {
 	
 	RequestInteract = "RequestInteract",
 	InteractionStateChanged = "InteractionStateChanged",
+	RequestWeaponAction = "RequestWeaponAction",
+	WeaponStateChanged = "WeaponStateChanged",
 }
 
 return RemoteNames

@@ -10,6 +10,8 @@ local DebugFlags = {
 	Spawn = true,
 	ClientRound = false,
 	ClientInteraction = true,
+	Weapon = true,
+	ClientWeapon = true,
 }
 
 return DebugFlags

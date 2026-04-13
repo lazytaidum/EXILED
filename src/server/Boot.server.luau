@@ -10,6 +10,7 @@ local bootOrder = {
 	require(ServicesFolder.RemoteRegistry),
 	require(ServicesFolder.PlayerService),
 	require(ServicesFolder.CharacterService),
+	require(ServicesFolder.WeaponService),
 	require(ServicesFolder.SpawnService),
 	require(ServicesFolder.ObjectiveService),
 	require(ServicesFolder.InteractionService),

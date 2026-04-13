@@ -10,6 +10,7 @@ local UIFolder = ClientFolder:WaitForChild("UI")
 
 local bootOrder = {
 	require(ControllersFolder.InputController),
+	require(ControllersFolder.WeaponController),
 	require(ControllersFolder.InteractionController),
 	require(ControllersFolder.RoundController),
 	require(UIFolder.UIController),

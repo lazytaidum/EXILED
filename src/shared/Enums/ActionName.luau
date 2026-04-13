@@ -3,6 +3,7 @@ local ActionName = {
 	ToolboxUse = "ToolboxUse",
 	SkillCheck = "SkillCheck",
 	DoorSlam = "DoorSlam",
+	PrimaryFire = "PrimaryFire",
 
 	Sprint = "Sprint",
 	Crouch = "Crouch",

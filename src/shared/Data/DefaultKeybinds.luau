@@ -25,7 +25,7 @@ local DefaultKeybinds = {
 	},
 
 	Mouse = {
-		MouseButton1 = {},
+		MouseButton1 = { ActionToken.PrimaryFire },
 		MouseButton2 = {},
 		MouseWheel = {},
 	},

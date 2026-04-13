@@ -17,6 +17,10 @@ local ActionResolutionRules = {
 		{ action = ActionName.Ability2, priority = 0 },
 	},
 
+	[ActionToken.PrimaryFire] = {
+		{ action = ActionName.PrimaryFire, priority = 0 },
+	},
+
 	[ActionToken.Sprint] = {
 		{ action = ActionName.Sprint, priority = 0 },
 	},

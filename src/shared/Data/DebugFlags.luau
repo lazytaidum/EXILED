@@ -18,6 +18,8 @@ local DebugFlags = {
 	ClientInteraction = true,
 	ClientMovement = true,
 	ClientStatus = true,
+	Weapon = true,
+	ClientWeapon = true,
 }
 
 return DebugFlags

@@ -1,6 +1,7 @@
 local ActionToken = {
 	PrimaryContextAction = "PrimaryContextAction",
 	SecondaryContextAction = "SecondaryContextAction",
+	PrimaryFire = "PrimaryFire",
 
 	Sprint = "Sprint",
 	Crouch = "Crouch",

@@ -10,6 +10,7 @@ function EscapeService:Init(services)
 	self.Services = services
 	self.EscapeZone = Workspace:WaitForChild("EscapeZone")
 	self.TouchDebounce = {}
+	self.EscapeEnabled = true
 end
 
 function EscapeService:Start()
@@ -45,6 +46,10 @@ function EscapeService:_onEscapeZoneTouched(hit)
 end
 
 function EscapeService:TryEscapePlayer(player)
+	if not self.EscapeEnabled then
+		return
+	end
+
 	local roundManager = self.Services.RoundManager
 	if not roundManager then
 		return
@@ -74,6 +79,17 @@ function EscapeService:TryEscapePlayer(player)
 	end
 
 	DebugLog:Log("Round", "[EscapeService] Player escaped:", player.Name)
+end
+
+function EscapeService:SetEscapeEnabled(state)
+	self.EscapeEnabled = state == true
+	self.EscapeZone.CanTouch = self.EscapeEnabled
+	self.EscapeZone:SetAttribute("DebugEscapeEnabled", self.EscapeEnabled)
+	self.EscapeZone.Transparency = self.EscapeEnabled and 0 or 0.35
+end
+
+function EscapeService:IsEscapeEnabled()
+	return self.EscapeEnabled == true
 end
 
 return EscapeService

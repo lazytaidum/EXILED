@@ -19,6 +19,8 @@ function RoundManager:Init(services)
 
 	self.ActivePlayers = {}
 	self.RoundStates = {}
+	self.SelectedEntityLineup = {}
+	self.CurrentReceptionDuration = RoundConfig.ReceptionDuration
 end
 
 function RoundManager:Start()
@@ -48,12 +50,20 @@ function RoundManager:SetPhase(phase, duration)
 		if self.Services.ObjectiveService then
 			self.Services.ObjectiveService:ResetObjectives()
 		end
+		if self.Services.VotingService then
+			self.Services.VotingService:ResetDraft()
+		end
+		if self.Services.EntityService then
+			self.Services.EntityService:SetRoundLineup(nil)
+		end
 		self:ClearRound()
 		for _, player in ipairs(self.Services.PlayerService:GetPlayers()) do
 			self:ApplyCurrentPhaseStateToPlayer(player)
 		end
 		self.Services.SpawnService:TeleportAllPlayersToLobby()
-		self.Services.EntityService:SetAllEntitiesActive(false)
+		self.Services.EntityService:SetAllEntitiesActive(false, {
+			ResetRound = true,
+		})
 
 	elseif phase == GamePhase.Preparation then
 		self:BuildRoundRoster()
@@ -90,6 +100,10 @@ function RoundManager:SetPhase(phase, duration)
 	end
 
 	self:BroadcastTimer()
+
+	if self.Services.RoundHookService then
+		self.Services.RoundHookService:RaisePhaseChanged(self.CurrentPhase, self.TimeLeft)
+	end
 end
 
 function RoundManager:BroadcastTimer()
@@ -117,6 +131,9 @@ function RoundManager:RunPhase(phase, duration)
 		task.wait(1)
 		self.TimeLeft -= 1
 		self:BroadcastTimer()
+		if self.Services.RoundHookService then
+			self.Services.RoundHookService:RaiseTimerTick(phase, self.TimeLeft)
+		end
 	end
 
 	if phase == GamePhase.Reception and not self.SkipPhase then
@@ -127,11 +144,35 @@ end
 function RoundManager:RunLoop()
 	while true do
 		self:RunPhase(GamePhase.Lobby, RoundConfig.IntermissionDuration)
-		self:RunPhase(GamePhase.Voting, RoundConfig.VotingDuration)
+		self:RunVotingPhase()
 		self:RunPhase(GamePhase.Preparation, RoundConfig.PreparationDuration)
-		self:RunPhase(GamePhase.Reception, RoundConfig.ReceptionDuration) -- Temporary test value!
+		self:RunPhase(GamePhase.Reception, self.CurrentReceptionDuration or RoundConfig.ReceptionDuration)
 		self:RunPhase(GamePhase.Results, RoundConfig.ResultsDuration)
 	end
+end
+
+function RoundManager:RunVotingPhase()
+	local votingService = self.Services.VotingService
+	if not votingService then
+		self.SelectedEntityLineup = {}
+		self.CurrentReceptionDuration = RoundConfig.ReceptionDuration
+		self:RunPhase(GamePhase.Voting, RoundConfig.VotingDuration)
+		return
+	end
+
+	self.SkipPhase = false
+	self:SetPhase(GamePhase.Voting, votingService:GetRoundDuration())
+
+	local draftResult = votingService:RunDraft()
+	self.SelectedEntityLineup = draftResult.SelectedEntityIds or {}
+	self.CurrentReceptionDuration = draftResult.ReceptionDuration or RoundConfig.ReceptionDuration
+
+	if self.Services.EntityService then
+		self.Services.EntityService:SetRoundLineup(self.SelectedEntityLineup)
+	end
+
+	self.TimeLeft = 0
+	self:BroadcastTimer()
 end
 
 function RoundManager:BuildRoundRoster()
@@ -161,7 +202,15 @@ end
 function RoundManager:ClearRound()
 	table.clear(self.ActivePlayers)
 	table.clear(self.RoundStates)
+	table.clear(self.SelectedEntityLineup)
 	self.CurrentOutcome = RoundOutcome.None
+	self.CurrentReceptionDuration = RoundConfig.ReceptionDuration
+	if self.Services.StimulusService then
+		self.Services.StimulusService:Reset()
+	end
+	if self.Services.RoundHookService then
+		self.Services.RoundHookService:ResetHooks()
+	end
 end
 
 function RoundManager:GetRoundState(player)
@@ -197,7 +246,7 @@ function RoundManager:ApplyCurrentPhaseStateToPlayer(player)
 	
 	local isActivePlayer = self:IsPlayerActive(player)
 	local shouldBeInvincible = isActivePlayer and self:IsInvinciblePhase(self.CurrentPhase)
-	local shouldBeFrozen = isActivePlayer and (self.CurrentPhase == GamePhase.Preparation or self.CurrentPhase == GamePhase.Results)
+	local shouldBeFrozen = isActivePlayer and (self.CurrentPhase == GamePhase.Results)
 	
 	character:SetInvincible(shouldBeInvincible)
 	
@@ -356,6 +405,12 @@ function RoundManager:OnReceptionTimerExpired()
 		self:EndReception(RoundOutcome.RemnantsWin)
 	else
 		self:EndReception(RoundOutcome.EntitiesWin)
+	end
+end
+
+function RoundManager:OnObjectiveCompleted(objective)
+	if self.Services.RoundHookService then
+		self.Services.RoundHookService:RaiseObjectiveCompleted(objective)
 	end
 end
 

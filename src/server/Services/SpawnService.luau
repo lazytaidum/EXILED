@@ -11,6 +11,7 @@ function SpawnService:Init(services)
 	local spawnsFolder = Workspace:WaitForChild("Spawns")
 	self.LobbySpawn = spawnsFolder:WaitForChild("LobbySpawn")
 	self.ReceptionSpawnsFolder = spawnsFolder:WaitForChild("ReceptionSpawns")
+	self.EntitySpawnsFolder = spawnsFolder:FindFirstChild("EntitySpawns")
 end
 
 function SpawnService:Start()
@@ -48,6 +49,18 @@ function SpawnService:GetRandomReceptionSpawn()
 	end
 	
 	return spawns[math.random(1, #spawns)]
+end
+
+function SpawnService:GetRandomEntitySpawn()
+	local entitySpawnsFolder = self.EntitySpawnsFolder
+	if entitySpawnsFolder and entitySpawnsFolder.Parent then
+		local spawns = entitySpawnsFolder:GetChildren()
+		if #spawns > 0 then
+			return spawns[math.random(1, #spawns)]
+		end
+	end
+
+	return self:GetRandomReceptionSpawn()
 end
 
 function SpawnService:TeleportPlayersToLobby(players)

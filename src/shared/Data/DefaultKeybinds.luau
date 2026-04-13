@@ -14,14 +14,14 @@ local DefaultKeybinds = {
 		LeftAlt = { ActionToken.RadialMenu },
 
 		R = { ActionToken.Reload },
-		F = { ActionToken.Flashlight },
+		F = { ActionToken.Ability3 },
 
 		Q = { ActionToken.Ability1 },
 
 		Z = { ActionToken.Perk1 },
 		X = { ActionToken.Perk2 },
 		C = { ActionToken.Perk3 },
-		V = { ActionToken.Perk4 },
+		V = { ActionToken.TogglePerspective },
 	},
 
 	Mouse = {

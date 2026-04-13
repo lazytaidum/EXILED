@@ -10,6 +10,7 @@ local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local FirearmAim = require(ReplicatedStorage.Shared.Utility.FirearmAim)
 local WeaponDefinitions = require(ReplicatedStorage.Shared.Data.WeaponDefinitions)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
 
 local CameraInputController = {}
 CameraInputController.Name = "CameraInputController"
@@ -208,7 +209,7 @@ function CameraInputController:_shouldLockMouse()
 
 	local roundState = self.RoundController and self.RoundController:GetState() or nil
 	local phase = roundState and roundState.Phase or "Unknown"
-	if phase ~= GamePhase.Preparation and phase ~= GamePhase.Reception then
+	if not WorldModeResolver.IsWeaponLab() and phase ~= GamePhase.Preparation and phase ~= GamePhase.Reception then
 		return false
 	end
 

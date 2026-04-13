@@ -14,7 +14,18 @@ WeaponLabController.Dependencies = {
 	"ViewmodelController",
 }
 
-local ATTACHMENT_EDITOR_NAMES = { "Aim", "RightHand", "LeftHand", "Muzzle" }
+local ATTACHMENT_EDITOR_NAMES = {
+	"Aim",
+	"RightHand",
+	"LeftHand",
+	"Muzzle",
+	"RightHandSocket",
+	"LeftHandSocket",
+	"RightElbowPole",
+	"LeftElbowPole",
+	"RightShoulderBase",
+	"LeftShoulderBase",
+}
 local DEFAULT_POSITION_STEP = 0.01
 local DEFAULT_ROTATION_STEP = 5
 
@@ -43,6 +54,7 @@ function WeaponLabController:Init()
 	self.SelectedWeaponIndex = 1
 	self.PositionStep = DEFAULT_POSITION_STEP
 	self.RotationStep = DEFAULT_ROTATION_STEP
+	self.LastAppliedLabWeaponId = nil
 	self.State = {
 		SelectedWeaponId = self.WeaponIds[1],
 		DefaultWeaponId = self.WeaponIds[1],
@@ -57,6 +69,10 @@ function WeaponLabController:Start()
 
 	if self.ViewmodelController and self.ViewmodelController.SetLabEnabled then
 		self.ViewmodelController:SetLabEnabled(true)
+		if self.State and self.State.SelectedWeaponId then
+			self.ViewmodelController:SetLabWeapon(self.State.SelectedWeaponId)
+			self.LastAppliedLabWeaponId = self.State.SelectedWeaponId
+		end
 	end
 
 	self:_createUi()
@@ -65,6 +81,14 @@ function WeaponLabController:Start()
 	self.StateRemote.OnClientEvent:Connect(function(payload)
 		self.State = payload or self.State
 		self:_syncSelectedIndexFromState()
+		if self.ViewmodelController
+			and self.ViewmodelController.SetLabWeapon
+			and self.State
+			and self.State.SelectedWeaponId
+			and self.State.SelectedWeaponId ~= self.LastAppliedLabWeaponId then
+			self.ViewmodelController:SetLabWeapon(self.State.SelectedWeaponId)
+			self.LastAppliedLabWeaponId = self.State.SelectedWeaponId
+		end
 		self:_refreshUi()
 	end)
 
@@ -561,7 +585,14 @@ function WeaponLabController:_refreshUi()
 	local autoRefreshStatic = labStatus and labStatus.AutoRefreshStatic == true
 	local debugPointsEnabled = labStatus and labStatus.DebugPointsEnabled == true
 	local firearmIkStatus = labStatus and labStatus.FirearmIk or nil
+	local firearmSolverMode = labStatus and labStatus.FirearmSolverMode or "LegacySingleArm"
+	local firearmSolveDebug = labStatus and labStatus.FirearmSolveDebug or nil
+	local handSocketStatus = labStatus and labStatus.HandSocketStatus or nil
 	local selectedAttachmentName = labStatus and labStatus.SelectedAttachmentName or ATTACHMENT_EDITOR_NAMES[1]
+	local isPositionOnlyEditor = selectedAttachmentName == "RightShoulderBase"
+		or selectedAttachmentName == "LeftShoulderBase"
+		or selectedAttachmentName == "RightElbowPole"
+		or selectedAttachmentName == "LeftElbowPole"
 	local selectedAttachmentOverride = labStatus and labStatus.SelectedAttachmentOverride or {
 		Position = Vector3.zero,
 		Rotation = Vector3.zero,
@@ -576,20 +607,42 @@ function WeaponLabController:_refreshUi()
 		(firearmIkStatus and firearmIkStatus.LeftTargetAvailable) and "Target" or "Missing",
 		tonumber(firearmIkStatus and firearmIkStatus.LeftInfluence) or 0
 	)
+	local rightSolveDebug = firearmSolveDebug and firearmSolveDebug.RightShoulder or nil
+	local leftSolveDebug = firearmSolveDebug and firearmSolveDebug.LeftShoulder or nil
+	local solveSummary = string.format(
+		"Solve Δ  |  R: %.3f, %.3f, %.3f  |  L: %.3f, %.3f, %.3f",
+		rightSolveDebug and rightSolveDebug.FinalCorrectionPosition and rightSolveDebug.FinalCorrectionPosition.X or 0,
+		rightSolveDebug and rightSolveDebug.FinalCorrectionPosition and rightSolveDebug.FinalCorrectionPosition.Y or 0,
+		rightSolveDebug and rightSolveDebug.FinalCorrectionPosition and rightSolveDebug.FinalCorrectionPosition.Z or 0,
+		leftSolveDebug and leftSolveDebug.FinalCorrectionPosition and leftSolveDebug.FinalCorrectionPosition.X or 0,
+		leftSolveDebug and leftSolveDebug.FinalCorrectionPosition and leftSolveDebug.FinalCorrectionPosition.Y or 0,
+		leftSolveDebug and leftSolveDebug.FinalCorrectionPosition and leftSolveDebug.FinalCorrectionPosition.Z or 0
+	)
+
+	local socketSummary = string.format(
+		"Sockets  |  Runtime R: %s  |  Runtime L: %s  |  Static R: %s  |  Static L: %s",
+		tostring(handSocketStatus and handSocketStatus.RuntimeRight or "Unknown"),
+		tostring(handSocketStatus and handSocketStatus.RuntimeLeft or "Unknown"),
+		tostring(handSocketStatus and handSocketStatus.StaticRight or "Unknown"),
+		tostring(handSocketStatus and handSocketStatus.StaticLeft or "Unknown")
+	)
 
 	self.UI.WeaponName.Text = selectedDefinition and (selectedDefinition.DisplayName or selectedWeaponId) or "-"
-	self.UI.AttachmentLabel.Text = "Attachment Editor"
+	self.UI.AttachmentLabel.Text = isPositionOnlyEditor and "Rig / Attachment Editor (Pos Only)" or "Rig / Attachment Editor"
 	self.UI.AttachmentName.Text = tostring(selectedAttachmentName)
 	self.UI.StateLabel.Text = string.format("Selected: %s\nLoaded: %s\nPerspective: %s", tostring(selectedWeaponId or "-"), tostring(liveDefinition and (liveDefinition.DisplayName or liveWeaponId) or liveWeaponId or "-"), tostring(perspectiveLabel))
 	self.UI.StatusLabel.Text = string.format(
-		"Lab: %s  |  Static: %s  |  Auto Refresh: %s  |  Debug Points: %s  |  Live Rig: %s\nAim: %s\n%s\nAttachment Pos: %.3f, %.3f, %.3f\nAttachment Rot: %.1f, %.1f, %.1f\n%s\n%s",
+		"Lab: %s  |  Static: %s  |  Auto Refresh: %s  |  Debug Points: %s  |  Live Rig: %s\nAim: %s\nSolver: %s\n%s\n%s\n%s\nEditor Pos: %.3f, %.3f, %.3f\nEditor Rot: %.1f, %.1f, %.1f\n%s\n%s",
 		labEnabled and "On" or "Off",
 		staticCaptured and "Captured" or "Empty",
 		autoRefreshStatic and "On" or "Off",
 		debugPointsEnabled and "On" or "Off",
 		showLiveRig and "On" or "Off",
 		(combatState and combatState.IsAiming) and "On" or "Off",
+		tostring(firearmSolverMode),
 		ikSummary,
+		solveSummary,
+		socketSummary,
 		selectedAttachmentOverride.Position.X,
 		selectedAttachmentOverride.Position.Y,
 		selectedAttachmentOverride.Position.Z,
@@ -608,6 +661,20 @@ function WeaponLabController:_refreshUi()
 	self.UI.ShowLiveButton.BackgroundColor3 = showLiveRig and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
 	self.UI.AimButton.BackgroundColor3 = (combatState and combatState.IsAiming) and Color3.fromRGB(88, 122, 206) or Color3.fromRGB(54, 58, 70)
 	self.UI.PerspectiveButton.Text = "Perspective: " .. tostring(perspectiveLabel)
+
+	local rotationButtons = {
+		self.UI.PitchMinusButton,
+		self.UI.PitchPlusButton,
+		self.UI.YawMinusButton,
+		self.UI.YawPlusButton,
+		self.UI.RollMinusButton,
+		self.UI.RollPlusButton,
+	}
+	for _, button in ipairs(rotationButtons) do
+		button.Active = not isPositionOnlyEditor
+		button.AutoButtonColor = not isPositionOnlyEditor
+		button.BackgroundColor3 = isPositionOnlyEditor and Color3.fromRGB(30, 34, 42) or Color3.fromRGB(40, 44, 54)
+	end
 end
 
 return WeaponLabController

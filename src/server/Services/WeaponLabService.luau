@@ -8,6 +8,7 @@ local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeReso
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local DEFAULT_WEAPON_ID = "Glock19G5"
+local LAB_STATE_REAPPLY_INTERVAL = 5
 
 local WeaponLabService = {}
 WeaponLabService.Name = "WeaponLabService"
@@ -26,6 +27,7 @@ end
 function WeaponLabService:Init(services)
 	self.Services = services
 	self.SelectedWeaponByPlayer = {}
+	self.LabStateLoopRunning = false
 end
 
 function WeaponLabService:Start()
@@ -55,6 +57,8 @@ function WeaponLabService:Start()
 	Players.PlayerRemoving:Connect(function(player)
 		self.SelectedWeaponByPlayer[player] = nil
 	end)
+
+	self:_startLabStateLoop()
 
 	DebugLog:Log("Boot", "[WeaponLabService] Started")
 end
@@ -125,29 +129,72 @@ function WeaponLabService:_sendState(player, message)
 	})
 end
 
-function WeaponLabService:_applyLabState(player, message)
+function WeaponLabService:_startLabStateLoop()
+	if self.LabStateLoopRunning then
+		return
+	end
+
+	self.LabStateLoopRunning = true
+	task.spawn(function()
+		while self.LabStateLoopRunning do
+			for _, player in ipairs(Players:GetPlayers()) do
+				if player.Parent == Players then
+					self:_maintainLabState(player)
+				end
+			end
+			task.wait(LAB_STATE_REAPPLY_INTERVAL)
+		end
+	end)
+end
+
+function WeaponLabService:_maintainLabState(player)
 	self:_sendRoundState(player)
 
 	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
 	if character then
 		character:SetInvincible(true)
 		character:Unfreeze()
-		character:SetAiming(false)
 		if character.Humanoid then
 			character.Humanoid.Health = character.Humanoid.MaxHealth
 		end
 	end
 
 	local selectedWeaponId = self:_getSelectedWeaponId(player)
-	if self.InventoryService then
+	local needsLoadoutRepair = false
+	local entries = self.InventoryService and self.InventoryService:GetEntries(player) or nil
+	if not entries or #entries ~= 1 then
+		needsLoadoutRepair = true
+	else
+		local onlyEntry = entries[1]
+		needsLoadoutRepair = not onlyEntry
+			or onlyEntry.EntryType ~= "Weapon"
+			or onlyEntry.ItemId ~= selectedWeaponId
+	end
+
+	local equippedState = self.CombatService and self.CombatService:GetEquippedWeaponState(player) or nil
+	if not equippedState or equippedState.ItemId ~= selectedWeaponId then
+		needsLoadoutRepair = true
+	end
+
+	if needsLoadoutRepair and self.InventoryService then
 		self.InventoryService:SetWeaponLoadout(player, { selectedWeaponId })
 	end
 
-	if self.CombatService then
+	if needsLoadoutRepair and self.CombatService then
 		self.CombatService:HandleEquipWeapon(player, 1)
 		self.CombatService:RefreshCombatState(player)
 	end
+end
 
+function WeaponLabService:_applyLabState(player, message)
+	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
+	if character then
+		character:SetAiming(false)
+	end
+
+	self:_maintainLabState(player)
+
+	local selectedWeaponId = self:_getSelectedWeaponId(player)
 	self:_sendState(player, message or string.format("Loaded %s", selectedWeaponId))
 end
 

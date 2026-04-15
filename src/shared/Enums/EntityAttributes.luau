@@ -7,6 +7,8 @@ local EntityAttributes = {
 	StatusApplication = "StatusApplication",
 	InstaDown = "InstaDown",
 	Rage = "Rage",
+	Buffing = "Buffing",
+	Healing = "Healing",
 }
 
 return EntityAttributes

@@ -66,10 +66,14 @@ end
 
 function ObjectiveService:ResetObjectives()
 	for _, objective in ipairs(self.Objectives) do
-		objective.Progress = 0
-		objective.LastLoggedProgressStep = -1
-		objective.IsComplete = false
-		objective.IsEnabled = objective.StartsEnabled
+		if objective.Reset then
+			objective:Reset()
+		else
+			objective.Progress = 0
+			objective.LastLoggedProgressStep = -1
+			objective.IsComplete = false
+			objective.IsEnabled = objective.StartsEnabled
+		end
 	end
 	
 	DebugLog:Log("Objectives", "[ObjectiveService] Objectives reset")

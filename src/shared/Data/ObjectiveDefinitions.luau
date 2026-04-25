@@ -16,6 +16,40 @@ local ObjectiveDefinitions = {
 		Shared = true,
 		StartsEnabled = true,
 	},
+	DissonanceAnchor = {
+		Id = "DissonanceAnchor",
+		DisplayName = "Dissonance Anchor",
+		Type = ObjectiveType.SecondaryObjective,
+		Phase = ObjectivePhase.Secondary,
+
+		MaxProgress = 10,
+		ChargeRate = 1,
+
+		Shared = true,
+		StartsEnabled = true,
+
+		Completion = {
+			ReceptionTimeBonus = 90,
+			Message = "Dissonance Anchor stabilized. Reception timer extended.",
+		},
+	},
+	CoalescenceRift = {
+		Id = "CoalescenceRift",
+		DisplayName = "Coalescence Rift",
+		Type = ObjectiveType.MapObjective,
+		Phase = ObjectivePhase.Primary,
+
+		MaxProgress = 12,
+		ChargeRate = 1,
+
+		Shared = true,
+		StartsEnabled = true,
+
+		Completion = {
+			EnableEscape = true,
+			Message = "Coalescence complete. Escape is open.",
+		},
+	},
 }
 
 return ObjectiveDefinitions

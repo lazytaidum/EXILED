@@ -5,6 +5,13 @@ local RemnantDefinitions = {
 		Archetype = "Insight",
 		Difficulty = 1.5,
 		DefaultFragments = 3, -- Temporary developer value until Soul Fragments are fully implemented.
+		ThirdPersonAnimationIds = {
+			Idle = "94253937973725",
+			Walk = "104033904275982",
+			Run = "96694263435744",
+			CrouchIdle = "81820278647674",
+			CrouchWalk = "71047579720711",
+		},
 		Abilities = {
 			Ability1 = {
 				Id = "WatchersEye",
@@ -23,6 +30,13 @@ local RemnantDefinitions = {
 				DamageMultiplier = 0.5,
 				Range = 160,
 				ShotInterval = 0.06,
+				EntityInterrupt = {
+					Reason = "Refixture",
+					CancelCast = true,
+					CancelSpecialMovement = true,
+					CancelSearchMode = true,
+					CancelProjectiles = true,
+				},
 			},
 			Ability3 = {
 				Id = "Watchtower",

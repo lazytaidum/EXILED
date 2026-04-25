@@ -17,13 +17,6 @@ local ActionResolutionRules = {
 		{ action = ActionName.Ability2, priority = 0 },
 	},
 
-<<<<<<< HEAD
-	[ActionToken.PrimaryFire] = {
-		{ action = ActionName.PrimaryFire, priority = 0 },
-	},
-
-=======
->>>>>>> 9defa84 (WHOLE LOTTA SHT)
 	[ActionToken.Sprint] = {
 		{ action = ActionName.Sprint, priority = 0 },
 	},

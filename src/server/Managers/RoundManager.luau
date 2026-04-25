@@ -47,6 +47,12 @@ function RoundManager:SetPhase(phase, duration)
 		if self.Services.InteractionService then
 			self.Services.InteractionService:StopAllInteractions("LobbyReset")
 		end
+		if self.Services.EscapeService then
+			self.Services.EscapeService:SetEscapeEnabled(false)
+		end
+		if self.Services.CharacterService then
+			self.Services.CharacterService:ResetRoundStateForAll()
+		end
 		if self.Services.ObjectiveService then
 			self.Services.ObjectiveService:ResetObjectives()
 		end
@@ -66,6 +72,9 @@ function RoundManager:SetPhase(phase, duration)
 		})
 
 	elseif phase == GamePhase.Preparation then
+		if self.Services.EscapeService then
+			self.Services.EscapeService:SetEscapeEnabled(false)
+		end
 		self:BuildRoundRoster()
 		self.Services.SpawnService:TeleportPlayersToReception(self.ActivePlayers)
 		self.Services.EntityService:SetAllEntitiesActive(false)
@@ -82,6 +91,9 @@ function RoundManager:SetPhase(phase, duration)
 	elseif phase == GamePhase.Results then
 		if self.Services.InteractionService then
 			self.Services.InteractionService:StopAllInteractions("Results")
+		end
+		if self.Services.EscapeService then
+			self.Services.EscapeService:SetEscapeEnabled(false)
 		end
 		self.Services.EntityService:SetAllEntitiesActive(false)
 		for _, player in ipairs(self.ActivePlayers) do
@@ -393,6 +405,26 @@ function RoundManager:EndReception(outcome)
 	DebugLog:Log("Round", "[RoundManager] Reception ended with outcome:", self.CurrentOutcome)
 end
 
+function RoundManager:OnEntitiesSuppressed(summary)
+	if not self:IsReceptionActive() then
+		return false
+	end
+
+	summary = summary or {}
+	local entityName = summary.EntityName or "Entities"
+	local reason = summary.Reason or "Suppressed"
+	local totalEntities = summary.TotalEntities or 0
+	DebugLog:Log("Round", string.format(
+		"[RoundManager] Entity suppression complete: %s (%s, %d tracked)",
+		entityName,
+		reason,
+		totalEntities
+	))
+
+	self:EndReception(RoundOutcome.RemnantsWin)
+	return true
+end
+
 function RoundManager:OnReceptionTimerExpired()
 	DebugLog:Log("Round", "[RoundManager] Reception timer expired")
 
@@ -411,6 +443,26 @@ end
 function RoundManager:OnObjectiveCompleted(objective)
 	if self.Services.RoundHookService then
 		self.Services.RoundHookService:RaiseObjectiveCompleted(objective)
+	end
+
+	local completion = objective and objective.Completion or nil
+	if type(completion) ~= "table" then
+		return
+	end
+
+	local message = completion.Message or (objective and objective.DisplayName) or "Objective"
+	local timeBonus = tonumber(completion.ReceptionTimeBonus)
+	if timeBonus and timeBonus > 0 and self.Services.RoundHookService then
+		self.Services.RoundHookService:ExtendReceptionTime(timeBonus, message)
+	end
+
+	if completion.EnableEscape and self.Services.EscapeService then
+		self.Services.EscapeService:SetEscapeEnabled(true)
+		DebugLog:Log("Round", string.format("[RoundManager] Escape enabled by objective: %s", message))
+	end
+
+	if completion.EndReceptionOutcome then
+		self:EndReception(completion.EndReceptionOutcome)
 	end
 end
 

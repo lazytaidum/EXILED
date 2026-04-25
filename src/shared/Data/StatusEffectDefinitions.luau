@@ -193,6 +193,7 @@ local StatusEffectDefinitions = {
 			HidesHeartbeat = true,
 		},
 	},
+
 }
 
 return StatusEffectDefinitions

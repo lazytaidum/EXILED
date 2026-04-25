@@ -225,6 +225,7 @@ function SurvivabilityFeedbackController:_update(deltaTime)
 	local movementState = tostring(self.StaminaState.MovementState or "Walk")
 	local isFatigued = inPlayablePhase and movementState == "Fatigue"
 	local lowHealthRatio = self:_getLowHealthRatio(inPlayablePhase)
+	local healthState = self.Character and self.Character:GetAttribute("RemnantHealthState") or nil
 
 	self.ChaseAlpha = self:_approach(self.ChaseAlpha, isChased and 1 or 0, deltaTime * 5.5)
 	self.FatigueAlpha = self:_approach(self.FatigueAlpha, isFatigued and 1 or 0, deltaTime * 5.5)
@@ -233,7 +234,7 @@ function SurvivabilityFeedbackController:_update(deltaTime)
 	self.Heartbeat.Intensity = self:_approach(self.Heartbeat.Intensity, heartbeatInfo.Intensity, deltaTime * 4.2)
 
 	self:_updateHeartbeatUi(inReception, deltaTime)
-	self:_updateStateBanner(inPlayablePhase, isChased, isFatigued, heartbeatInfo, lowHealthRatio)
+	self:_updateStateBanner(inPlayablePhase, isChased, isFatigued, heartbeatInfo, lowHealthRatio, healthState)
 	self:_updateLowHealthOverlay(inPlayablePhase)
 end
 
@@ -308,6 +309,10 @@ function SurvivabilityFeedbackController:_getLowHealthRatio(isActive)
 		return 0
 	end
 
+	if self.Character and self.Character:GetAttribute("RemnantHealthState") == "Crumbling" then
+		return 1
+	end
+
 	local maxHealth = math.max(1, self.Humanoid.MaxHealth)
 	local healthRatio = math.clamp(self.Humanoid.Health / maxHealth, 0, 1)
 	if healthRatio >= 0.55 then
@@ -347,7 +352,7 @@ function SurvivabilityFeedbackController:_updateHeartbeatUi(isActive, deltaTime)
 	label.TextColor3 = intensity >= 0.7 and Color3.fromRGB(255, 154, 154) or Color3.fromRGB(255, 110, 110)
 end
 
-function SurvivabilityFeedbackController:_updateStateBanner(isActive, isChased, isFatigued, heartbeatInfo, lowHealthRatio)
+function SurvivabilityFeedbackController:_updateStateBanner(isActive, isChased, isFatigued, heartbeatInfo, lowHealthRatio, healthState)
 	local frame = self.UI.StateFrame
 	local label = self.UI.StateLabel
 	local subLabel = self.UI.StateSubLabel
@@ -363,6 +368,18 @@ function SurvivabilityFeedbackController:_updateStateBanner(isActive, isChased, 
 
 	if not isActive then
 		targetAlpha = 0
+	elseif healthState == "Crumbling" then
+		local recovery = self.Character and self.Character:GetAttribute("RemnantRecoveryProgress") or 0
+		local bleedOut = self.Character and self.Character:GetAttribute("RemnantBleedOutRemaining") or 0
+		local needsAllyRecovery = self.Character and self.Character:GetAttribute("RemnantNeedsAllyRecovery") == true
+		title = "CRUMBLING"
+		if needsAllyRecovery then
+			message = string.format("Recovered as far as you can. Another Remnant must finish. %.0fs before collapse.", bleedOut)
+		else
+			message = string.format("Hold Interact to recover. %.0f%% recovered, %.0fs before collapse.", recovery, bleedOut)
+		end
+		tint = Color3.fromRGB(122, 190, 255)
+		targetAlpha = 1
 	elseif isChased then
 		title = "CHASED"
 		message = "An Entity is actively pursuing you."

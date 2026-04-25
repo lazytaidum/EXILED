@@ -10,13 +10,15 @@ function EscapeService:Init(services)
 	self.Services = services
 	self.EscapeZone = Workspace:WaitForChild("EscapeZone")
 	self.TouchDebounce = {}
-	self.EscapeEnabled = true
+	self.EscapeEnabled = false
 end
 
 function EscapeService:Start()
 	self.EscapeZone.Touched:Connect(function(hit)
 		self:_onEscapeZoneTouched(hit)
 	end)
+
+	self:SetEscapeEnabled(false)
 	
 	DebugLog:Log("Round", "[EscapeService] Started")
 end
@@ -67,10 +69,14 @@ function EscapeService:TryEscapePlayer(player)
 	if not roundState or not roundState.IsAlive then
 		return
 	end
+
+	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
+	if not character or not character:IsActionable() then
+		return
+	end
 	
 	roundManager:SetPlayerEscaped(player)
 
-	local character = self.Services.CharacterService:GetCharacterByPlayer(player)
 	if character then
 		character:Freeze()
 		if character.RootPart then

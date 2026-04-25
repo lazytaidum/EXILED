@@ -3,10 +3,6 @@ local ActionName = {
 	ToolboxUse = "ToolboxUse",
 	SkillCheck = "SkillCheck",
 	DoorSlam = "DoorSlam",
-<<<<<<< HEAD
-	PrimaryFire = "PrimaryFire",
-=======
->>>>>>> 9defa84 (WHOLE LOTTA SHT)
 
 	Sprint = "Sprint",
 	Crouch = "Crouch",

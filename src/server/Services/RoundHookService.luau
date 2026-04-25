@@ -12,6 +12,7 @@ RoundHookService.Dependencies = {
 function RoundHookService:Init(services)
 	self.Services = services
 	self.ActiveHooks = {}
+	self.DisabledHooks = {}
 	self.TriggeredThresholds = {}
 end
 
@@ -21,6 +22,7 @@ end
 
 function RoundHookService:ResetHooks()
 	self.ActiveHooks = {}
+	self.DisabledHooks = {}
 	self.TriggeredThresholds = {}
 end
 
@@ -29,12 +31,14 @@ function RoundHookService:RegisterHook(hook)
 		return nil
 	end
 
+	self.DisabledHooks[hook.Id] = nil
 	self.ActiveHooks[hook.Id] = hook
 	return hook.Id
 end
 
 function RoundHookService:RemoveHook(hookId)
 	self.ActiveHooks[hookId] = nil
+	self.DisabledHooks[hookId] = nil
 	self.TriggeredThresholds[hookId] = nil
 end
 
@@ -112,11 +116,47 @@ function RoundHookService:SetReceptionTime(timeLeft, reason)
 end
 
 function RoundHookService:_invokeHook(hook, context)
+	if not hook or self.DisabledHooks[hook.Id] then
+		return false
+	end
+
 	if hook.Callback then
-		hook.Callback(context)
+		local ok, err = xpcall(function()
+			hook.Callback(context)
+		end, debug.traceback)
+		if not ok then
+			hook.FailureCount = (hook.FailureCount or 0) + 1
+			local sourceLabel = hook.SourceLabel or hook.Id or "UnknownHook"
+			warn(string.format("[RoundHookService] Hook %s failed: %s", tostring(sourceLabel), tostring(err)))
+			DebugLog:Log("Round", string.format("[RoundHookService] Hook %s failed (%d): %s", tostring(sourceLabel), hook.FailureCount, tostring(err)))
+
+			if hook.OnError then
+				local onErrorOk, onErrorErr = xpcall(function()
+					hook.OnError(err, context)
+				end, debug.traceback)
+				if not onErrorOk then
+					warn(string.format("[RoundHookService] Hook %s OnError failed: %s", tostring(sourceLabel), tostring(onErrorErr)))
+				end
+			end
+
+			if hook.DisableOnError ~= false then
+				self.DisabledHooks[hook.Id] = {
+					FailedAt = os.clock(),
+					Error = tostring(err),
+					FailureCount = hook.FailureCount,
+					SourceLabel = sourceLabel,
+				}
+				self.ActiveHooks[hook.Id] = nil
+				self.TriggeredThresholds[hook.Id] = nil
+				DebugLog:Log("Round", string.format("[RoundHookService] Disabled failing hook %s", tostring(sourceLabel)))
+			end
+
+			return false
+		end
 	end
 
 	DebugLog:Log("Round", string.format("[RoundHookService] Triggered hook %s", tostring(hook.Id)))
+	return true
 end
 
 return RoundHookService

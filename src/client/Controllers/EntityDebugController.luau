@@ -253,27 +253,104 @@ function EntityDebugController:_refreshOverlays()
 		local intent = model:GetAttribute("DebugIntent") or "None"
 		local intentConfidence = model:GetAttribute("DebugIntentConfidence") or "0.00"
 		local intentReason = model:GetAttribute("DebugIntentReason") or "None"
-		local topStimuli = model:GetAttribute("DebugTopStimuli") or "None"
-		local searchCenter = model:GetAttribute("DebugSearchCenter") or ""
-		local memoryAge = model:GetAttribute("DebugMemoryAge") or ""
 		local health = model:GetAttribute("DebugHealth") or 0
 		local maxHealth = model:GetAttribute("DebugMaxHealth") or 0
 		local target = model:GetAttribute("DebugTarget") or ""
+		local directSight = model:GetAttribute("DebugDirectSight")
+		local detectionSight = model:GetAttribute("DebugDetectionSight")
+		local patrolReason = model:GetAttribute("DebugPatrolReason") or ""
+		local patrolPointId = model:GetAttribute("DebugPatrolPointId") or ""
+		local patrolPauseRemaining = model:GetAttribute("DebugPatrolPauseRemaining")
+		local chaseLostSight = model:GetAttribute("DebugChaseLostSight")
 		local lastAbility = model:GetAttribute("DebugLastAbility") or "None"
-		local absorbed = model:GetAttribute("DebugAbsorbedCount") or 0
+		local networkOwner = model:GetAttribute("DebugNetworkOwner") or "Server"
+		local moveMode = model:GetAttribute("DebugMoveMode") or "Idle"
+		local walkSpeed = model:GetAttribute("DebugWalkSpeed")
+		local targetWalkSpeed = model:GetAttribute("DebugTargetWalkSpeed")
+		local pathStatus = model:GetAttribute("DebugPathStatus") or "Idle"
+		local pathError = model:GetAttribute("DebugPathError") or ""
+		local waypointIndex = model:GetAttribute("DebugWaypointIndex") or 0
+		local waypointCount = model:GetAttribute("DebugWaypointCount") or 0
+		local targetDistance = model:GetAttribute("DebugTargetDistance")
+		local goalDistance = model:GetAttribute("DebugGoalDistance")
+		local predictionSeconds = model:GetAttribute("DebugPredictionSeconds")
+		local predictionMode = model:GetAttribute("DebugPredictionMode") or "None"
+		local turnSeverity = model:GetAttribute("DebugTurnSeverity")
+		local pathAge = model:GetAttribute("DebugPathAge")
+		local remainingPathDistance = model:GetAttribute("DebugRemainingPathDistance")
+		local hasLineOfSight = model:GetAttribute("DebugLineOfSight")
+		local hasMovementLane = model:GetAttribute("DebugMovementLane")
+		local directGrace = model:GetAttribute("DebugDirectGrace")
+		local attackPhase = model:GetAttribute("DebugAttackPhase") or ""
+		local attackRemaining = model:GetAttribute("DebugAttackRemaining")
+		local attackResult = model:GetAttribute("DebugAttackResult") or ""
+		local attackBlocked = model:GetAttribute("DebugAttackBlocked")
 		local hitDamage = model:GetAttribute("DebugRecentHitDamage")
 		local hitSource = model:GetAttribute("DebugRecentHitSource")
 		local hitExpiresAt = model:GetAttribute("DebugRecentHitExpiresAt") or 0
 		local hitActive = hitDamage ~= nil and now <= hitExpiresAt
+		local losText = hasLineOfSight == nil and "Unknown" or (hasLineOfSight and "Clear" or "Blocked")
+		local laneText = hasMovementLane == nil and "Unknown" or (hasMovementLane and "Clear" or "Blocked")
+		local targetDistanceText = typeof(targetDistance) == "number" and string.format("%.1f", targetDistance) or "--"
+		local goalDistanceText = typeof(goalDistance) == "number" and string.format("%.1f", goalDistance) or "--"
+		local predictionSecondsText = typeof(predictionSeconds) == "number" and string.format("%.2fs", predictionSeconds) or "--"
+		local turnSeverityText = typeof(turnSeverity) == "number" and string.format("%.2f", turnSeverity) or "--"
+		local pathAgeText = typeof(pathAge) == "number" and string.format("%.2fs", pathAge) or "--"
+		local remainingPathText = typeof(remainingPathDistance) == "number" and string.format("%.1f", remainingPathDistance) or "--"
+		local directGraceText = typeof(directGrace) == "number" and string.format("%.2fs", directGrace) or "--"
+		local walkSpeedText = typeof(walkSpeed) == "number" and string.format("%.1f", walkSpeed) or "--"
+		local targetWalkSpeedText = typeof(targetWalkSpeed) == "number" and string.format("%.1f", targetWalkSpeed) or "--"
+		local attackRemainingText = typeof(attackRemaining) == "number" and string.format("%.2fs", attackRemaining) or "--"
+		local attackBlockedText = typeof(attackBlocked) == "number" and string.format("%.2fs", attackBlocked) or "--"
+		local patrolPauseText = typeof(patrolPauseRemaining) == "number" and string.format("%.2fs", patrolPauseRemaining) or "--"
+		local chaseLostSightText = typeof(chaseLostSight) == "number" and string.format("%.2fs", chaseLostSight) or "--"
 
 		overlay.Billboard.Enabled = debugUiEnabled
 		overlay.NameLabel.Text = _clampText(name, 32)
-		overlay.StateLabel.Text = string.format("State: %s%s", _clampText(state, 12), target ~= "" and ("  Target: " .. _clampText(target, 14)) or "")
+		overlay.StateLabel.Text = string.format(
+			"State: %s%s%s%s",
+			_clampText(state, 12),
+			target ~= "" and ("  Target: " .. _clampText(target, 12)) or "",
+			directSight ~= nil and ("  Sight: " .. (directSight and "Yes" or "No")) or "",
+			detectionSight ~= nil and ("  Detect: " .. (detectionSight and "Yes" or "No")) or ""
+		)
 		overlay.IntentLabel.Text = string.format("Intent: %s (%s)  via %s", _clampText(intent, 12), _clampText(intentConfidence, 4), _clampText(intentReason, 16))
-		overlay.StimulusLabel.Text = string.format("Stimuli: %s", _clampText(topStimuli, 96))
-		overlay.MemoryLabel.Text = string.format("Memory: %s%s", memoryAge ~= "" and memoryAge or "None", searchCenter ~= "" and ("  Search: " .. searchCenter) or "")
-		overlay.AbilityLabel.Text = string.format("Last: %s%s", _clampText(lastAbility, 18), absorbed > 0 and ("  Absorbed: " .. tostring(absorbed)) or "")
-		overlay.HealthLabel.Text = string.format("HP: %d / %d", health, maxHealth)
+		overlay.StimulusLabel.Text = string.format(
+			"Move: %s %s>%s  Path: %s  WP: %d/%d  Dist: %s  Goal: %s  Rem: %s",
+			_clampText(moveMode, 10),
+			walkSpeedText,
+			targetWalkSpeedText,
+			_clampText(pathStatus, 14),
+			waypointIndex,
+			waypointCount,
+			targetDistanceText,
+			goalDistanceText,
+			remainingPathText
+		)
+		overlay.MemoryLabel.Text = string.format(
+			"Pred: %s @ %s  Turn: %s  LoS: %s  Lane: %s  Lost: %s",
+			_clampText(predictionMode, 10),
+			predictionSecondsText,
+			turnSeverityText,
+			losText,
+			laneText,
+			chaseLostSightText
+		)
+		overlay.AbilityLabel.Text = string.format(
+			"Last: %s  Owner: %s  Age: %s%s%s",
+			_clampText(lastAbility, 12),
+			_clampText(networkOwner, 10),
+			pathAgeText,
+			pathError ~= "" and ("  Err: " .. _clampText(pathError, 10)) or "",
+			attackPhase ~= "" and ("  Atk: " .. _clampText(attackPhase, 8) .. "@" .. attackRemainingText .. (attackResult ~= "" and ("/" .. _clampText(attackResult, 6)) or "") .. " B:" .. attackBlockedText) or ""
+		)
+		overlay.HealthLabel.Text = string.format(
+			"HP: %d / %d  Grace: %s%s",
+			health,
+			maxHealth,
+			directGraceText,
+			patrolReason ~= "" and ("  Patrol: " .. _clampText(patrolReason, 8) .. "/" .. _clampText(patrolPointId, 8) .. "@" .. patrolPauseText) or ""
+		)
 		overlay.HitLabel.Text = hitActive and string.format("HIT %s (%s)", tostring(hitDamage), _clampText(hitSource or "Unknown", 18)) or ""
 		overlay.Frame.BackgroundColor3 = hitActive and Color3.fromRGB(23, 40, 30) or Color3.fromRGB(16, 18, 24)
 	end

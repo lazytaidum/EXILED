@@ -1,5 +1,6 @@
 local DebugFlags = {
 	Enabled = true,
+	Boot = true,
 	Round = true,
 	Objectives = true,
 	ObjectiveProgress = false,
@@ -7,25 +8,25 @@ local DebugFlags = {
 	Movement = true,
 	Status = true,
 	Entity = true,
-	ClientCombat = true,
-	EntityDebugOverlay = true,
-	InteractableDebugOverlay = true,
-	DevMenu = true,
+	Combat = true,
+	Weapon = true,
+	Remnant = true,
+	Voting = true,
 	Character = false,
 	Player = false,
 	Spawn = true,
+	ClientCombat = true,
 	ClientRound = false,
 	ClientInteraction = true,
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 	ClientMovement = true,
 	ClientStatus = true,
->>>>>>> 810c075b2889537cc9adaee092fa1a3c8f989cab
-	Weapon = true,
+	ClientRemnant = true,
+	ClientSurvival = true,
 	ClientWeapon = true,
-=======
->>>>>>> 9defa84 (WHOLE LOTTA SHT)
+	EntityDebugOverlay = true,
+	InteractableDebugOverlay = true,
+	DevMenu = true,
+	WeaponLab = true,
 }
 
 return DebugFlags

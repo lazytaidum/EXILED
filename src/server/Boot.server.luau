@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local WorldMode = require(ReplicatedStorage.Shared.Enums.WorldMode)
 local WorldModeResolver = require(ReplicatedStorage.Shared.Utility.WorldModeResolver)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
+local EntityDefinitionValidator = require(ReplicatedStorage.Shared.Utility.EntityDefinitionValidator)
 local RingWrapper = require(ReplicatedStorage.Shared.Utility.RingWrapper)
 local ServerWorld = require(ReplicatedStorage.Shared.World.ServerWorld)
 
@@ -16,6 +17,8 @@ local function _buildGameplayBootOrder()
 		require(ServicesFolder.DevService),
 		require(ServicesFolder.PlayerService),
 		require(ServicesFolder.CharacterService),
+		require(ServicesFolder.ThirdPersonAnimationService),
+		require(ServicesFolder.ThirdPersonWeaponPresentationService),
 		require(ServicesFolder.StimulusService),
 		require(ServicesFolder.StaminaService),
 		require(ServicesFolder.MovementService),
@@ -25,6 +28,8 @@ local function _buildGameplayBootOrder()
 		require(ServicesFolder.WeaponPickupService),
 		require(ServicesFolder.ItemPickupService),
 		require(ServicesFolder.EnvironmentalHazardService),
+		require(ServicesFolder.DoorService),
+		require(ServicesFolder.VaultService),
 		require(ServicesFolder.QTEService),
 		require(ServicesFolder.StruggleService),
 		require(ServicesFolder.BreathHoldService),
@@ -60,6 +65,8 @@ local function _buildWeaponLabBootOrder()
 		require(ServicesFolder.PlayerService),
 		require(ServicesFolder.StatusEffectService),
 		require(ServicesFolder.CharacterService),
+		require(ServicesFolder.ThirdPersonAnimationService),
+		require(ServicesFolder.ThirdPersonWeaponPresentationService),
 		require(ServicesFolder.InventoryService),
 		require(ServicesFolder.StaminaService),
 		require(ServicesFolder.MovementService),
@@ -71,6 +78,16 @@ end
 local bootOrder = WorldModeResolver.GetWorldMode() == WorldMode.WeaponLab
 	and _buildWeaponLabBootOrder()
 	or _buildGameplayBootOrder()
+
+local entityValidationReport = EntityDefinitionValidator.ValidateAll()
+for _, warningMessage in ipairs(entityValidationReport.Warnings) do
+	DebugLog:Log("Boot", string.format("[EntityValidator] Warning: %s", warningMessage))
+end
+if not entityValidationReport.IsValid then
+	error(entityValidationReport.Summary, 0)
+end
+
+DebugLog:Log("Boot", entityValidationReport.Summary)
 
 local Services = RingWrapper.CreateRing(bootOrder)
 RingWrapper.Attach(bootOrder, Services, "Services")

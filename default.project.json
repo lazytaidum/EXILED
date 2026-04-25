@@ -48,6 +48,172 @@
             512
           ]
         }
+      },
+      "Spawns": {
+        "$className": "Folder",
+        "LobbySpawn": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "Color": [
+              0.2,
+              0.7,
+              1
+            ],
+            "Position": [
+              0,
+              2,
+              48
+            ],
+            "Size": [
+              8,
+              1,
+              8
+            ],
+            "Transparency": 0.35
+          }
+        },
+        "ReceptionSpawns": {
+          "$className": "Folder",
+          "ReceptionSpawn": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "Color": [
+                0.2,
+                1,
+                0.5
+              ],
+              "Position": [
+                0,
+                2,
+                0
+              ],
+              "Size": [
+                8,
+                1,
+                8
+              ],
+              "Transparency": 0.35
+            }
+          }
+        },
+        "EntitySpawns": {
+          "$className": "Folder",
+          "EntitySpawn": {
+            "$className": "Part",
+            "$properties": {
+              "Anchored": true,
+              "CanCollide": false,
+              "Color": [
+                1,
+                0.2,
+                0.2
+              ],
+              "Position": [
+                34,
+                2,
+                0
+              ],
+              "Size": [
+                8,
+                1,
+                8
+              ],
+              "Transparency": 0.35
+            }
+          }
+        }
+      },
+      "Objectives": {
+        "$className": "Folder",
+        "CoalescenceRift": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "Color": [
+              0.4,
+              0.8,
+              1
+            ],
+            "Material": "Neon",
+            "Position": [
+              -16,
+              2,
+              -18
+            ],
+            "Size": [
+              5,
+              5,
+              5
+            ],
+            "Transparency": 0.15
+          }
+        },
+        "DissonanceAnchor": {
+          "$className": "Part",
+          "$properties": {
+            "Anchored": true,
+            "CanCollide": false,
+            "Color": [
+              1,
+              0.75,
+              0.25
+            ],
+            "Material": "Neon",
+            "Position": [
+              16,
+              2,
+              -18
+            ],
+            "Size": [
+              4,
+              6,
+              4
+            ],
+            "Transparency": 0.1
+          }
+        }
+      },
+      "EscapeZone": {
+        "$className": "Part",
+        "$properties": {
+          "Anchored": true,
+          "CanCollide": false,
+          "CanTouch": true,
+          "Color": [
+            0.7,
+            0.95,
+            1
+          ],
+          "Material": "Neon",
+          "Position": [
+            0,
+            2,
+            -46
+          ],
+          "Size": [
+            18,
+            8,
+            4
+          ],
+          "Transparency": 0.35
+        }
+      },
+      "Interactables": {
+        "$className": "Folder",
+        "Doors": {
+          "$className": "Folder"
+        },
+        "Vaults": {
+          "$className": "Folder"
+        }
+      },
+      "Entities": {
+        "$className": "Folder"
       }
     },
     "Lighting": {

@@ -47,7 +47,7 @@ function MovementService:HandleMovementRequest(player, actionName, isActive)
 	end
 
 	local character = self.World:GetCharacter(player)
-	if not character or not character:IsAlive() then
+	if not character or not character:IsActionable() then
 		return
 	end
 

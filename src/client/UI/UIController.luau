@@ -17,13 +17,14 @@ local THEME = {
 
 -- Drop your final artist-delivered asset ids here when they're ready.
 local MENU_BUTTONS = {
-	Left = {
-		{ Name = "Inventory", AssetId = "", Fallback = "INV" },
-		{ Name = "RemnantUI", AssetId = "", Fallback = "REM" },
-		{ Name = "Shop", AssetId = "", Fallback = "SHOP" },
+	Cluster = {
+		Toggle = { Name = "MenuToggle", AssetId = "", Fallback = "MENU" },
+		Top = { Name = "Shop", AssetId = "81671780755393", Fallback = "SHOP" },
+		Left = { Name = "Bestiary", AssetId = "119013698714288", Fallback = "BEST" },
+		Right = { Name = "Inventory", AssetId = "106944705372370", Fallback = "INV" },
+		Bottom = { Name = "RemnantUI", AssetId = "135609942842581", Fallback = "REM" },
 	},
 	Right = {
-		{ Name = "Bestiary", AssetId = "", Fallback = "BEST" },
 		{ Name = "DailyRewards", AssetId = "", Fallback = "DAY" },
 		{ Name = "Achievements", AssetId = "", Fallback = "ACH" },
 	},
@@ -139,27 +140,55 @@ local function attachHover(button, fill, stroke)
 	end)
 end
 
+local function attachScaleHover(button, uiScale)
+	local tweenInfo = TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	button.MouseEnter:Connect(function()
+		TweenService:Create(uiScale, tweenInfo, {
+			Scale = 1.06,
+		}):Play()
+	end)
+
+	button.MouseLeave:Connect(function()
+		TweenService:Create(uiScale, tweenInfo, {
+			Scale = 1,
+		}):Play()
+	end)
+end
+
 local function createIconButton(parent, definition)
+	local buttonImage = normalizeAssetId(definition.AssetId)
+	local hasCustomArt = buttonImage ~= ""
+
 	local button = Instance.new("ImageButton")
 	button.Name = definition.Name .. "Button"
 	button.BackgroundTransparency = 1
 	button.AutoButtonColor = false
-	button.Size = UDim2.fromOffset(92, 92)
-	button.ImageTransparency = 1
+	button.Size = UDim2.fromOffset(124, 124)
+	button.Image = buttonImage
+	button.ImageColor3 = Color3.new(1, 1, 1)
+	button.ImageTransparency = hasCustomArt and 0 or 1
+	button.ScaleType = hasCustomArt and Enum.ScaleType.Crop or Enum.ScaleType.Fit
+	button:SetAttribute("HasCustomArt", hasCustomArt)
 	button.Parent = parent
 
 	local aspect = Instance.new("UIAspectRatioConstraint")
 	aspect.AspectRatio = 1
 	aspect.Parent = button
 
+	local scale = Instance.new("UIScale")
+	scale.Scale = 1
+	scale.Parent = button
+
 	local diamond = Instance.new("Frame")
 	diamond.Name = "Diamond"
 	diamond.AnchorPoint = Vector2.new(0.5, 0.5)
 	diamond.Position = UDim2.fromScale(0.5, 0.5)
-	diamond.Size = UDim2.fromScale(0.76, 0.76)
+	diamond.Size = UDim2.fromScale(0.9, 0.9)
 	diamond.Rotation = 45
 	diamond.BackgroundColor3 = THEME.Panel
 	diamond.BackgroundTransparency = 0.14
+	diamond.Visible = not hasCustomArt
 	diamond.Parent = button
 
 	applyCorner(diamond, 18)
@@ -180,10 +209,10 @@ local function createIconButton(parent, definition)
 	image.Position = UDim2.fromScale(0.5, 0.5)
 	image.Size = UDim2.fromScale(0.88, 0.88)
 	image.BackgroundTransparency = 1
-	image.Image = normalizeAssetId(definition.AssetId)
+	image.Image = buttonImage
 	image.ImageColor3 = THEME.Text
 	image.ScaleType = Enum.ScaleType.Fit
-	image.Visible = image.Image ~= ""
+	image.Visible = not hasCustomArt and image.Image ~= ""
 	image.Parent = iconHolder
 
 	local fallback = Instance.new("TextLabel")
@@ -196,7 +225,7 @@ local function createIconButton(parent, definition)
 	fallback.Text = definition.Fallback
 	fallback.TextColor3 = THEME.Text
 	fallback.TextScaled = true
-	fallback.Visible = image.Image == ""
+	fallback.Visible = not hasCustomArt and image.Image == ""
 	fallback.Parent = iconHolder
 
 	local padding = Instance.new("UIPadding")
@@ -206,7 +235,11 @@ local function createIconButton(parent, definition)
 	padding.PaddingTop = UDim.new(0, 12)
 	padding.Parent = fallback
 
-	attachHover(button, diamond, diamondStroke)
+	if hasCustomArt then
+		attachScaleHover(button, scale)
+	else
+		attachHover(button, diamond, diamondStroke)
+	end
 
 	return button
 end
@@ -233,6 +266,65 @@ local function createPillButton(parent, name, position, size, text)
 	return button
 end
 
+local function createMenuToggleButton(parent, definition, position)
+	local buttonImage = normalizeAssetId(definition.AssetId)
+	local hasCustomArt = buttonImage ~= ""
+
+	local button = Instance.new("ImageButton")
+	button.Name = definition.Name .. "Button"
+	button.AnchorPoint = Vector2.new(0.5, 0.5)
+	button.Position = position
+	button.Size = UDim2.fromOffset(88, 88)
+	button.BackgroundColor3 = THEME.Panel
+	button.BackgroundTransparency = hasCustomArt and 1 or 0.1
+	button.AutoButtonColor = false
+	button.Image = buttonImage
+	button.ImageTransparency = hasCustomArt and 0 or 1
+	button.ScaleType = Enum.ScaleType.Fit
+	button.Parent = parent
+
+	if not hasCustomArt then
+		applyCorner(button, 18)
+	end
+
+	local stroke
+	if hasCustomArt then
+		stroke = applyStroke(button, THEME.Stroke, 1, 1)
+	else
+		stroke = applyStroke(button, THEME.Stroke, 0.25, 2)
+	end
+
+	local scale = Instance.new("UIScale")
+	scale.Scale = 1
+	scale.Parent = button
+	attachScaleHover(button, scale)
+
+	if not hasCustomArt then
+		attachHover(button, button, stroke)
+	end
+
+	if not hasCustomArt then
+		local fallback = Instance.new("TextLabel")
+		fallback.Name = "Fallback"
+		fallback.Size = UDim2.fromScale(1, 1)
+		fallback.BackgroundTransparency = 1
+		fallback.Font = Enum.Font.GothamBlack
+		fallback.Text = definition.Fallback
+		fallback.TextColor3 = THEME.Text
+		fallback.TextScaled = true
+		fallback.Parent = button
+
+		local padding = Instance.new("UIPadding")
+		padding.PaddingBottom = UDim.new(0, 20)
+		padding.PaddingLeft = UDim.new(0, 12)
+		padding.PaddingRight = UDim.new(0, 12)
+		padding.PaddingTop = UDim.new(0, 20)
+		padding.Parent = fallback
+	end
+
+	return button
+end
+
 local function createMenuRail(parent, name, position, definitions)
 	local rail = Instance.new("Frame")
 	rail.Name = name
@@ -254,6 +346,45 @@ local function createMenuRail(parent, name, position, definitions)
 	end
 
 	return rail, buttons
+end
+
+local function createCollapsedMenuCluster(parent, position, definitions)
+	local clusterRoot = Instance.new("Frame")
+	clusterRoot.Name = "ClusterMenu"
+	clusterRoot.AnchorPoint = Vector2.new(0.5, 0.5)
+	clusterRoot.Position = position
+	clusterRoot.Size = UDim2.fromOffset(360, 260)
+	clusterRoot.BackgroundTransparency = 1
+	clusterRoot.Parent = parent
+
+	local toggleButton = createMenuToggleButton(clusterRoot, definitions.Toggle, UDim2.new(0, 44, 0.5, 0))
+
+	local buttonsHost = Instance.new("Frame")
+	buttonsHost.Name = "ButtonsHost"
+	buttonsHost.AnchorPoint = Vector2.new(0, 0.5)
+	buttonsHost.Position = UDim2.new(0, 120, 0.5, 0)
+	buttonsHost.Size = UDim2.fromOffset(220, 220)
+	buttonsHost.BackgroundTransparency = 1
+	buttonsHost.Parent = clusterRoot
+
+	local center = UDim2.new(0, -36, 0.5, 0)
+	local entries = {
+		{ Key = "Top", Definition = definitions.Top, OpenPosition = UDim2.new(0.5, 0, 0, 22) },
+		{ Key = "Left", Definition = definitions.Left, OpenPosition = UDim2.new(0, 22, 0.5, 0) },
+		{ Key = "Right", Definition = definitions.Right, OpenPosition = UDim2.new(1, -22, 0.5, 0) },
+		{ Key = "Bottom", Definition = definitions.Bottom, OpenPosition = UDim2.new(0.5, 0, 1, -22) },
+	}
+
+	for _, entry in ipairs(entries) do
+		local button = createIconButton(buttonsHost, entry.Definition)
+		button.AnchorPoint = Vector2.new(0.5, 0.5)
+		button.Position = center
+		button.Visible = false
+		entry.Button = button
+		entry.ClosedPosition = center
+	end
+
+	return clusterRoot, toggleButton, entries
 end
 
 local function createSeparator(parent, positionY)
@@ -386,7 +517,7 @@ local function ensureMainHUD(playerGui)
 	createQuestColumn(ritualsPanel, "DailyColumn", "DAILY", THEME.Accent, UDim2.new(0, 14, 0, 58))
 	createQuestColumn(ritualsPanel, "WeeklyColumn", "WEEKLY", THEME.WarmAccent, UDim2.new(0.52, 0, 0, 58))
 
-	local _, leftButtons = createMenuRail(shell, "LeftRail", UDim2.new(0, 72, 0.5, 40), MENU_BUTTONS.Left)
+	local clusterRoot, clusterToggleButton, clusterEntries = createCollapsedMenuCluster(shell, UDim2.new(0, 186, 0.5, 8), MENU_BUTTONS.Cluster)
 	local _, rightButtons = createMenuRail(shell, "RightRail", UDim2.new(1, -74, 0.56, 0), MENU_BUTTONS.Right)
 	local _, bottomRightButtons = createMenuRail(shell, "BottomRightRail", UDim2.new(1, -74, 1, -166), MENU_BUTTONS.BottomRight)
 
@@ -399,7 +530,9 @@ local function ensureMainHUD(playerGui)
 		TimerLabel = timerLabel,
 		OutcomeLabel = outcomeLabel,
 		PlayerList = listFrame,
-		LeftButtons = leftButtons,
+		ClusterRoot = clusterRoot,
+		ClusterToggleButton = clusterToggleButton,
+		ClusterEntries = clusterEntries,
 		RightButtons = rightButtons,
 		BottomRightButtons = bottomRightButtons,
 		SpectateButton = spectateButton,
@@ -415,6 +548,7 @@ function UIController:Init(controllers)
 	self.LastTimeLeft = nil
 	self.LastOutcome = nil
 	self.PlayerCards = {}
+	self.IsClusterMenuOpen = false
 end
 
 function UIController:Start()
@@ -426,8 +560,18 @@ function UIController:Start()
 	self.OutcomeLabel = refs.OutcomeLabel
 	self.PlayerList = refs.PlayerList
 	self.SpectateButton = refs.SpectateButton
+	self.ClusterRoot = refs.ClusterRoot
+	self.ClusterToggleButton = refs.ClusterToggleButton
+	self.ClusterEntries = refs.ClusterEntries
 
 	self:_refreshPlayerRoster()
+	self:_setClusterMenuOpen(false, true)
+
+	if self.ClusterToggleButton then
+		self.ClusterToggleButton.Activated:Connect(function()
+			self:_setClusterMenuOpen(not self.IsClusterMenuOpen)
+		end)
+	end
 
 	Players.PlayerAdded:Connect(function()
 		self:_refreshPlayerRoster()
@@ -447,6 +591,82 @@ function UIController:Start()
 	end)
 
 	print("[UIController] Started")
+end
+
+function UIController:_setClusterMenuOpen(isOpen, instant)
+	self.IsClusterMenuOpen = isOpen
+
+	if not self.ClusterEntries then
+		return
+	end
+
+	local tweenInfo = TweenInfo.new(instant and 0 or 0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+
+	for _, entry in ipairs(self.ClusterEntries) do
+		local button = entry.Button
+		if button then
+			button.Visible = true
+
+			local targetPosition = isOpen and entry.OpenPosition or entry.ClosedPosition
+			local targetTransparency = isOpen and 0 or 1
+
+			if instant then
+				button.Position = targetPosition
+				button.ImageTransparency = targetTransparency
+			else
+				TweenService:Create(button, tweenInfo, {
+					Position = targetPosition,
+					ImageTransparency = targetTransparency,
+				}):Play()
+			end
+
+			local diamond = button:FindFirstChild("Diamond")
+			if diamond and diamond:IsA("Frame") then
+				local hasCustomArt = button:GetAttribute("HasCustomArt") == true
+				diamond.Visible = not hasCustomArt
+				if not hasCustomArt then
+					if instant then
+						diamond.BackgroundTransparency = isOpen and 0.14 or 1
+					else
+						TweenService:Create(diamond, tweenInfo, {
+							BackgroundTransparency = isOpen and 0.14 or 1,
+						}):Play()
+					end
+				end
+			end
+
+			local iconHolder = button:FindFirstChild("Diamond") and button.Diamond:FindFirstChild("IconHolder")
+			if iconHolder then
+				for _, child in ipairs(iconHolder:GetChildren()) do
+					if child:IsA("ImageLabel") then
+						if instant then
+							child.ImageTransparency = isOpen and 0 or 1
+						else
+							TweenService:Create(child, tweenInfo, {
+								ImageTransparency = isOpen and 0 or 1,
+							}):Play()
+						end
+					elseif child:IsA("TextLabel") then
+						if instant then
+							child.TextTransparency = isOpen and 0 or 1
+						else
+							TweenService:Create(child, tweenInfo, {
+								TextTransparency = isOpen and 0 or 1,
+							}):Play()
+						end
+					end
+				end
+			end
+
+			if not isOpen then
+				task.delay(instant and 0 or 0.2, function()
+					if not self.IsClusterMenuOpen and button then
+						button.Visible = false
+					end
+				end)
+			end
+		end
+	end
 end
 
 function UIController:UpdateHUD()

@@ -35,7 +35,7 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 	end
 
 	local targetCharacter = self.CharacterService:GetCharacterByPlayer(targetPlayer)
-	if not targetCharacter or not targetCharacter:IsAlive() then
+	if not targetCharacter or not targetCharacter:IsActionable() then
 		return false
 	end
 
@@ -73,6 +73,12 @@ function StruggleService:BeginStruggle(entity, targetPlayer, params)
 
 	self.ActiveStruggles[targetPlayer] = struggle
 	self:_setGrabDebugMarker(targetPlayer, entity)
+	if entity.BeginPinned then
+		entity:BeginPinned(targetPlayer, {
+			TargetPlayer = targetPlayer,
+			TargetPosition = targetCharacter.RootPart.Position,
+		})
+	end
 
 	if self.InteractionService and self.InteractionService:IsInteracting(targetPlayer) then
 		self.InteractionService:InterruptInteraction(targetPlayer, "Struggle")
@@ -148,6 +154,20 @@ function StruggleService:CanBeginStruggle(entity, targetPlayer)
 	return false, existing
 end
 
+function StruggleService:IsEntityStruggling(entity)
+	if not entity then
+		return false
+	end
+
+	for _, struggle in pairs(self.ActiveStruggles) do
+		if struggle.Entity == entity then
+			return true
+		end
+	end
+
+	return false
+end
+
 function StruggleService:IsPlayerStruggling(player)
 	return self.ActiveStruggles[player] ~= nil
 end
@@ -162,7 +182,7 @@ function StruggleService:GetPeelInteractable(helperPlayer)
 	for victimPlayer, struggle in pairs(self.ActiveStruggles) do
 		if victimPlayer ~= helperPlayer then
 			local victimCharacter = self.CharacterService:GetCharacterByPlayer(victimPlayer)
-			if victimCharacter and victimCharacter.RootPart and victimCharacter:IsAlive() then
+			if victimCharacter and victimCharacter.RootPart and victimCharacter:IsActionable() then
 				local distance = (victimCharacter.RootPart.Position - helperPosition).Magnitude
 				if distance <= struggle.PeelRange then
 					return {
@@ -242,7 +262,7 @@ function StruggleService:_updateStruggles()
 
 	for player, struggle in pairs(self.ActiveStruggles) do
 		local targetCharacter = self.CharacterService:GetCharacterByPlayer(player)
-		if not targetCharacter or not targetCharacter:IsAlive() then
+		if not targetCharacter or not targetCharacter:IsActionable() then
 			self:_endStruggle(player, "TargetLost")
 			continue
 		end
@@ -279,6 +299,13 @@ function StruggleService:_breakFree(player, struggle)
 	end
 
 	self:_returnEntityAfterBreakFree(struggle)
+	if struggle.Entity and struggle.Entity.EndPinned then
+		struggle.Entity:EndPinned("Stunned", {
+			TargetPlayer = player,
+			TargetPosition = nil,
+			HasDirectSight = false,
+		})
+	end
 	self.ActiveStruggles[player] = nil
 	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, "Escaped")
@@ -298,6 +325,13 @@ function StruggleService:_peelFree(player, struggle, helperPlayer)
 	end
 
 	self:_returnEntityAfterBreakFree(struggle)
+	if struggle.Entity and struggle.Entity.EndPinned then
+		struggle.Entity:EndPinned("Stunned", {
+			TargetPlayer = player,
+			TargetPosition = nil,
+			HasDirectSight = false,
+		})
+	end
 	self.ActiveStruggles[player] = nil
 	self:_clearGrabDebugMarker(player)
 	self.QTEService:StopSession(player, "Peeled")
@@ -319,6 +353,14 @@ function StruggleService:_endStruggle(player, reason, options)
 		if not options.PreserveEntityStun then
 			statusService:RemoveStatus(struggle.Entity, StatusEffectId.Stunned)
 		end
+	end
+
+	if struggle.Entity and struggle.Entity.GetState and struggle.Entity:GetState() == "Pinned" and struggle.Entity.EndPinned then
+		struggle.Entity:EndPinned(nil, {
+			TargetPlayer = player,
+			TargetPosition = nil,
+			HasDirectSight = false,
+		})
 	end
 
 	self.ActiveStruggles[player] = nil

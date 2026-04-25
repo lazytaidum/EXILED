@@ -66,15 +66,38 @@ local function _getHazardLabel(instance)
 	return name, spent and "SPENT" or "HAZARD", spent and Color3.fromRGB(128, 128, 136) or Color3.fromRGB(255, 168, 92)
 end
 
+local function _getDoorLabel(instance)
+	local displayName = instance:GetAttribute("DisplayName")
+	local open = instance:GetAttribute("Open") == true
+	local busy = instance:GetAttribute("Busy") == true
+	local locked = instance:GetAttribute("Locked") == true
+	local name = (displayName and displayName ~= "" and displayName) or instance.Name
+	local state = locked and "LOCKED" or (busy and "MOVING" or (open and "OPEN" or "DOOR"))
+	local color = locked and Color3.fromRGB(150, 150, 156)
+		or (busy and Color3.fromRGB(255, 222, 134))
+		or (open and Color3.fromRGB(133, 228, 169))
+		or Color3.fromRGB(185, 154, 112)
+	return name, state, color
+end
+
+local function _getVaultLabel(instance)
+	local displayName = instance:GetAttribute("DisplayName")
+	local name = (displayName and displayName ~= "" and displayName) or instance.Name
+	return name, "VAULT", Color3.fromRGB(132, 194, 255)
+end
+
 function InteractableDebugController:Init()
 	self.Player = self.World.Player
 	self.PlayerGui = self.World.PlayerGui
 	self.DebugUiEnabled = true
+	local interactablesFolder = Workspace:FindFirstChild("Interactables")
 	self.Folders = {
 		Objectives = Workspace:FindFirstChild("Objectives"),
 		WeaponPickups = Workspace:FindFirstChild("WeaponPickups"),
 		ItemPickups = Workspace:FindFirstChild("ItemPickups"),
 		EnvironmentalHazards = Workspace:FindFirstChild("EnvironmentalHazards"),
+		Doors = (interactablesFolder and interactablesFolder:FindFirstChild("Doors")) or Workspace:FindFirstChild("Doors"),
+		Vaults = (interactablesFolder and interactablesFolder:FindFirstChild("Vaults")) or Workspace:FindFirstChild("Vaults"),
 	}
 	self.Overlays = {}
 end
@@ -104,6 +127,34 @@ function InteractableDebugController:Start()
 		if child.Name == "EnvironmentalHazards" and child:IsA("Folder") and not self.Folders.EnvironmentalHazards then
 			self.Folders.EnvironmentalHazards = child
 			self:_trackFolder(child)
+		elseif child.Name == "Vaults" and child:IsA("Folder") and not self.Folders.Vaults then
+			self.Folders.Vaults = child
+			self:_trackFolder(child)
+		elseif child.Name == "Doors" and child:IsA("Folder") and not self.Folders.Doors then
+			self.Folders.Doors = child
+			self:_trackFolder(child)
+		elseif child.Name == "Interactables" and child:IsA("Folder") then
+			local doorsFolder = child:FindFirstChild("Doors")
+			if doorsFolder and doorsFolder:IsA("Folder") and not self.Folders.Doors then
+				self.Folders.Doors = doorsFolder
+				self:_trackFolder(doorsFolder)
+			end
+
+			local vaultsFolder = child:FindFirstChild("Vaults")
+			if vaultsFolder and vaultsFolder:IsA("Folder") and not self.Folders.Vaults then
+				self.Folders.Vaults = vaultsFolder
+				self:_trackFolder(vaultsFolder)
+			end
+
+			child.ChildAdded:Connect(function(grandchild)
+				if grandchild.Name == "Doors" and grandchild:IsA("Folder") and not self.Folders.Doors then
+					self.Folders.Doors = grandchild
+					self:_trackFolder(grandchild)
+				elseif grandchild.Name == "Vaults" and grandchild:IsA("Folder") and not self.Folders.Vaults then
+					self.Folders.Vaults = grandchild
+					self:_trackFolder(grandchild)
+				end
+			end)
 		end
 	end)
 
@@ -247,6 +298,14 @@ function InteractableDebugController:_describeInstance(instance)
 
 	if self.Folders.EnvironmentalHazards and instance.Parent == self.Folders.EnvironmentalHazards then
 		return _getHazardLabel(instance)
+	end
+
+	if self.Folders.Doors and instance.Parent == self.Folders.Doors then
+		return _getDoorLabel(instance)
+	end
+
+	if self.Folders.Vaults and instance.Parent == self.Folders.Vaults then
+		return _getVaultLabel(instance)
 	end
 
 	return nil

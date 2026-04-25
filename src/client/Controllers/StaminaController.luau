@@ -234,16 +234,41 @@ function StaminaController:_refresh()
 	local ratio = math.clamp(current / max, 0, 1)
 	local health = self.Humanoid and self.Humanoid.Health or self.Health or 100
 	local maxHealth = math.max(1, self.Humanoid and self.Humanoid.MaxHealth or self.MaxHealth or 100)
+	local healthState = self.Character and self.Character:GetAttribute("RemnantHealthState") or nil
+	local shards = self.Character and self.Character:GetAttribute("RemnantShards") or nil
+	local maxShards = self.Character and self.Character:GetAttribute("RemnantMaxShards") or nil
+	local recoveryProgress = self.Character and self.Character:GetAttribute("RemnantRecoveryProgress") or 0
+	local recoveryMax = math.max(1, self.Character and self.Character:GetAttribute("RemnantRecoveryMax") or 100)
+	local selfRecoveryCap = self.Character and self.Character:GetAttribute("RemnantSelfRecoveryCap") or recoveryMax
+	local needsAllyRecovery = self.Character and self.Character:GetAttribute("RemnantNeedsAllyRecovery") == true
+	local bleedOutRemaining = self.Character and self.Character:GetAttribute("RemnantBleedOutRemaining") or 0
 	local healthRatio = math.clamp(health / maxHealth, 0, 1)
 	local movementState = tostring(self.State.MovementState or "Walk")
+	local isCrumbling = healthState == "Crumbling"
+	if isCrumbling then
+		healthRatio = math.clamp(recoveryProgress / recoveryMax, 0, 1)
+	end
+
 	self.UI.Bar.Size = UDim2.new(ratio, 0, 1, 0)
 	self.UI.HealthBar.Size = UDim2.new(healthRatio, 0, 1, 0)
-	self.UI.HealthLabel.Text = string.format("Health %.0f/%.0f", health, maxHealth)
+	if isCrumbling then
+		if needsAllyRecovery then
+			self.UI.HealthLabel.Text = string.format("Crumbling %.0f%% | Needs ally | %.0fs", recoveryProgress, bleedOutRemaining)
+		elseif selfRecoveryCap < recoveryMax then
+			self.UI.HealthLabel.Text = string.format("Crumbling %.0f/%.0f%% | Shards %d/%d | %.0fs", recoveryProgress, selfRecoveryCap, shards or 0, maxShards or 0, bleedOutRemaining)
+		else
+			self.UI.HealthLabel.Text = string.format("Crumbling %.0f%% | Shards %d/%d | %.0fs", recoveryProgress, shards or 0, maxShards or 0, bleedOutRemaining)
+		end
+	else
+		self.UI.HealthLabel.Text = string.format("Health %.0f/%.0f | Shards %d/%d", health, maxHealth, shards or 0, maxShards or 0)
+	end
 	self.UI.Label.Text = string.format("Stamina %.1f/%.0f", current, max)
 	self.UI.StateLabel.Text = string.upper(movementState)
-	self.UI.PortraitLabel.Text = maxHealth > 0 and (health / maxHealth <= 0.35 and ":(" or ":)") or ":|"
+	self.UI.PortraitLabel.Text = isCrumbling and "!!" or (maxHealth > 0 and (health / maxHealth <= 0.35 and ":(" or ":)") or ":|")
 
-	if healthRatio <= 0.25 then
+	if isCrumbling then
+		self.UI.HealthBar.BackgroundColor3 = Color3.fromRGB(122, 190, 255)
+	elseif healthRatio <= 0.25 then
 		self.UI.HealthBar.BackgroundColor3 = Color3.fromRGB(214, 92, 92)
 	elseif healthRatio <= 0.5 then
 		self.UI.HealthBar.BackgroundColor3 = Color3.fromRGB(229, 123, 88)

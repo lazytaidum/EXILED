@@ -238,7 +238,7 @@ function RemnantService:HandleAbilityRequest(player, abilitySlot)
 
 	local roundState = self.RoundManager:GetRoundState(player)
 	local character = self.CharacterService and self.CharacterService:GetCharacterByPlayer(player)
-	if not roundState or not roundState.IsAlive or not character or not character:IsAlive() then
+	if not roundState or not roundState.IsAlive or not character or not character:IsActionable() then
 		return false
 	end
 
@@ -403,22 +403,10 @@ function RemnantService:_useRefixture(player, state, character)
 	end
 
 	local origin = character.RootPart.Position + Vector3.new(0, 2.8, 0)
-	local nearestEntity = nil
-	local nearestDistance = math.huge
 	local maxRange = abilityDefinition.Range or 160
-
-	for _, entity in ipairs(self.EntityService.Entities or {}) do
-		if entity.IsActive and entity.Health > 0 and entity.Model then
-			local entityPosition = entity:GetPosition()
-			if entityPosition then
-				local distance = (entityPosition - origin).Magnitude
-				if distance <= maxRange and distance < nearestDistance then
-					nearestDistance = distance
-					nearestEntity = entity
-				end
-			end
-		end
-	end
+	local nearestEntity = self.EntityService:GetNearestEntity(origin, {
+		MaxDistance = maxRange,
+	})
 
 	if not nearestEntity then
 		return false
@@ -453,7 +441,7 @@ function RemnantService:_useRefixture(player, state, character)
 
 	for shotIndex = 1, shotCount do
 		task.delay((shotIndex - 1) * shotInterval, function()
-			if not character:IsAlive() then
+			if not character:IsActionable() then
 				return
 			end
 
@@ -474,6 +462,7 @@ function RemnantService:_useRefixture(player, state, character)
 				SourcePlayer = player,
 				WeaponId = weaponDefinition.Id,
 				Source = "Refixture",
+				Interrupt = abilityDefinition.EntityInterrupt,
 			})
 		end)
 	end

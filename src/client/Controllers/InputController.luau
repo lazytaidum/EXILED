@@ -29,46 +29,31 @@ end
 
 function InputController:Start()
 	self.IsHoldingInteract = false
-	
+
 	UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		if self:_shouldIgnoreInput(input, gameProcessedEvent) then
 			return
 		end
 
-<<<<<<< HEAD
-		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
-			return
-		end
-		
-		if input.KeyCode == Enum.KeyCode.Space then
-			self.IsHoldingInteract = true
-			DebugLog:Log("ClientInteraction", "[InputController] Interact key pressed")
-			self:RequestInteractStart()
-		end
-	end)
-	
-	UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
 		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
 			return
 		end
 
-		if input.KeyCode == Enum.KeyCode.Space then
-			self.IsHoldingInteract = false
-			DebugLog:Log("ClientInteraction", "[InputController] Interact key released")
-			self:RequestInteractStop()
-=======
 		self:_handleKeyboardInput(input.KeyCode, true)
 	end)
-	
+
 	UserInputService.InputEnded:Connect(function(input, gameProcessedEvent)
 		if self:_shouldIgnoreInput(input, gameProcessedEvent) then
 			return
->>>>>>> 810c075b2889537cc9adaee092fa1a3c8f989cab
+		end
+
+		if self.Controllers and self.Controllers.WeaponLabController and self.Controllers.WeaponLabController:IsCapturingInput() then
+			return
 		end
 
 		self:_handleKeyboardInput(input.KeyCode, false)
 	end)
-	
+
 	DebugLog:Log("ClientInteraction", "[InputController] Started")
 end
 

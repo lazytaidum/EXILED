@@ -13,6 +13,8 @@ InteractionService.Dependencies = {
 	"QTEService",
 	"CharacterService",
 	"ObjectiveService",
+	"DoorService",
+	"VaultService",
 	"WeaponPickupService",
 	"ItemPickupService",
 	"EnvironmentalHazardService",
@@ -71,6 +73,42 @@ function InteractionService:StartInteraction(player)
 	local target = self:FindBestInteractable(player)
 	if not target then
 		DebugLog:Log("Interaction", string.format("[InteractionService] Ignored start for %s: no valid target", player.Name))
+		return
+	end
+
+	if target.Type == InteractableType.Vault then
+		self.InteractionStateRemote:FireClient(player, {
+			State = "Start",
+			Target = target.DisplayName,
+			Progress = 0,
+			Max = 1,
+		})
+
+		local completed = self.VaultService and self.VaultService:CompleteVault(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop",
+			Target = target.DisplayName,
+			Progress = completed and 1 or 0,
+			Max = 1,
+		})
+		return
+	end
+
+	if target.Type == InteractableType.Door then
+		self.InteractionStateRemote:FireClient(player, {
+			State = "Start",
+			Target = target.DisplayName,
+			Progress = 0,
+			Max = 1,
+		})
+
+		local completed = self.DoorService and self.DoorService:CompleteDoor(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop",
+			Target = target.DisplayName,
+			Progress = completed and 1 or 0,
+			Max = 1,
+		})
 		return
 	end
 	
@@ -153,15 +191,56 @@ function InteractionService:FindBestInteractable(player)
 			end
 		end
 	end
-	
-	for _, objective in ipairs(self.ObjectiveService:GetObjectives()) do
-		if objective.Type == InteractableType.Objective or objective.Type == "MapObjective" then
-			if objective:CanInteract() and objective.Instance then
-				local distance = (objective.Instance.Position - playerPosition).Magnitude
-				if distance <= 12 and distance < bestDistance then
-					bestTarget = objective
+
+	local recoveryTarget = self.CharacterService and self.CharacterService:GetRecoveryInteractableForPlayer(player)
+	if recoveryTarget then
+		return recoveryTarget
+	end
+
+	local healingTarget = self.CharacterService and self.CharacterService:GetHealingInteractableForPlayer(player)
+	if healingTarget and healingTarget.Instance then
+		local distance = (healingTarget.Instance.Position - playerPosition).Magnitude
+		if distance <= (healingTarget.InteractRange or 10) and distance < bestDistance then
+			bestTarget = healingTarget
+			bestDistance = distance
+		end
+	end
+
+	local doorService = self.DoorService
+	if doorService then
+		for _, door in ipairs(doorService:GetAvailableDoors()) do
+			local doorInstance = door.Instance
+			if doorInstance and doorService:CanUseDoor(player, door) then
+				local distance = (doorInstance.Position - playerPosition).Magnitude
+				if distance <= (door.InteractRange or 9) and distance < bestDistance then
+					bestTarget = door
 					bestDistance = distance
 				end
+			end
+		end
+	end
+
+	local vaultService = self.VaultService
+	if vaultService then
+		for _, vault in ipairs(vaultService:GetAvailableVaults()) do
+			local vaultInstance = vault.Instance
+			if vaultInstance and vaultService:CanVault(player, vault) then
+				local distance = (vaultInstance.Position - playerPosition).Magnitude
+				if distance <= (vault.InteractRange or 8) and distance < bestDistance then
+					bestTarget = vault
+					bestDistance = distance
+				end
+			end
+		end
+	end
+
+	for _, objective in ipairs(self.ObjectiveService:GetObjectives()) do
+		local objectivePosition = objective.GetPosition and objective:GetPosition() or nil
+		if objective:CanInteract() and objectivePosition then
+			local distance = (objectivePosition - playerPosition).Magnitude
+			if distance <= 12 and distance < bestDistance then
+				bestTarget = objective
+				bestDistance = distance
 			end
 		end
 	end
@@ -208,6 +287,13 @@ function InteractionService:FindBestInteractable(player)
 		end
 	end
 
+	if not bestTarget and self.CharacterService then
+		local selfHealingTarget = self.CharacterService:GetSelfHealingInteractableForPlayer(player)
+		if selfHealingTarget then
+			return selfHealingTarget
+		end
+	end
+
 	return bestTarget
 end
 
@@ -223,6 +309,82 @@ end
 
 function InteractionService:_updateInteraction(player, interaction)
 	local target = interaction.Target
+
+	if target and target.Type == InteractableType.Door then
+		local completed = self.DoorService and self.DoorService:CompleteDoor(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop",
+			Target = target.DisplayName,
+			Progress = completed and 1 or 0,
+			Max = 1,
+		})
+		self:StopInteraction(player)
+		return
+	end
+
+	if target and target.Type == InteractableType.Vault then
+		local completed = self.VaultService and self.VaultService:CompleteVault(player, target)
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Stop",
+			Target = target.DisplayName,
+			Progress = completed and 1 or 0,
+			Max = 1,
+		})
+		self:StopInteraction(player)
+		return
+	end
+
+	if target and target.Type == InteractableType.RemnantRecovery then
+		local amount = target.ChargeRate * self.UpdateInterval
+		local progressed, completed, snapshot = self.CharacterService and self.CharacterService:ProgressRecovery(player, target.RecoveryTargetPlayer, amount)
+		if not progressed then
+			self.InteractionStateRemote:FireClient(player, {
+				State = "Stop"
+			})
+			self:StopInteraction(player)
+			return
+		end
+
+		target.Progress = snapshot and snapshot.Progress or target.Progress
+
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Update",
+			Target = target.DisplayName,
+			Progress = math.clamp(target.Progress or 0, 0, target.MaxProgress or 1),
+			Max = target.MaxProgress or 1,
+		})
+
+		if completed then
+			self:StopInteraction(player)
+		end
+		return
+	end
+
+	if target and target.Type == InteractableType.RemnantHealing then
+		local amount = target.ChargeRate * self.UpdateInterval
+		local progressed, completed, snapshot = self.CharacterService and self.CharacterService:ProgressHealing(player, target.HealingTargetPlayer, amount)
+		if not progressed then
+			self.InteractionStateRemote:FireClient(player, {
+				State = "Stop"
+			})
+			self:StopInteraction(player)
+			return
+		end
+
+		target.Progress = snapshot and snapshot.Progress or target.Progress
+
+		self.InteractionStateRemote:FireClient(player, {
+			State = completed and "Complete" or "Update",
+			Target = target.DisplayName,
+			Progress = math.clamp(target.Progress or 0, 0, target.MaxProgress or 1),
+			Max = target.MaxProgress or 1,
+		})
+
+		if completed then
+			self:StopInteraction(player)
+		end
+		return
+	end
 
 	if target and target.Type == InteractableType.WeaponPickup then
 		local completed = self.WeaponPickupService and self.WeaponPickupService:CompletePickup(player, target)
@@ -298,7 +460,13 @@ function InteractionService:_updateInteraction(player, interaction)
 		return
 	end
 	
-	local distance = (target.Instance.Position - character.RootPart.Position).Magnitude
+	local targetPosition = target.GetPosition and target:GetPosition() or (target.Instance and target.Instance.Position) or nil
+	if not targetPosition then
+		self:StopInteraction(player)
+		return
+	end
+
+	local distance = (targetPosition - character.RootPart.Position).Magnitude
 	if distance > 12 then
 		DebugLog:Log("Interaction", string.format("[InteractionService] %s moved too far from %s", player.Name, target.DisplayName))
 		self:StopInteraction(player)

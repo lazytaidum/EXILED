@@ -1,11 +1,37 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ContentProvider = game:GetService("ContentProvider")
 
 local GamePhase = require(ReplicatedStorage.Shared.Enums.GamePhase)
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
+local RemnantDefinitions = require(ReplicatedStorage.Shared.Data.RemnantDefinitions)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
 
 local RemnantController = {}
 RemnantController.Name = "RemnantController"
+
+local function _normalizeAnimationId(animationId)
+	if animationId == nil then
+		return nil
+	end
+
+	if type(animationId) == "number" then
+		return "rbxassetid://" .. tostring(animationId)
+	end
+
+	if type(animationId) ~= "string" or animationId == "" then
+		return nil
+	end
+
+	if string.find(animationId, "rbxassetid://", 1, true) == 1 then
+		return animationId
+	end
+
+	if string.match(animationId, "^%d+$") then
+		return "rbxassetid://" .. animationId
+	end
+
+	return animationId
+end
 
 function RemnantController:Init()
 	self.PlayerGui = self.World.PlayerGui
@@ -18,10 +44,50 @@ function RemnantController:Init()
 	self.LastStateSyncAt = os.clock()
 end
 
+function RemnantController:_preloadRemnantAnimations()
+	local animationsToPreload = {}
+	local seenIds = {}
+
+	for _, remnantDefinition in pairs(RemnantDefinitions) do
+		local animationIds = remnantDefinition and remnantDefinition.ThirdPersonAnimationIds or nil
+		if type(animationIds) == "table" then
+			for _, animationId in pairs(animationIds) do
+				local normalizedId = _normalizeAnimationId(animationId)
+				if normalizedId and not seenIds[normalizedId] then
+					local animation = Instance.new("Animation")
+					animation.AnimationId = normalizedId
+					table.insert(animationsToPreload, animation)
+					seenIds[normalizedId] = true
+				end
+			end
+		end
+	end
+
+	if #animationsToPreload <= 0 then
+		return
+	end
+
+	local ok, err = pcall(function()
+		ContentProvider:PreloadAsync(animationsToPreload)
+	end)
+
+	for _, animation in ipairs(animationsToPreload) do
+		animation:Destroy()
+	end
+
+	if not ok then
+		DebugLog:Log("ClientRemnant", string.format("[RemnantController] Failed to preload remnant animations: %s", tostring(err)))
+	end
+end
+
 function RemnantController:Start()
 	self.Remote = self.Remotes:WaitForChild(RemoteNames.RemnantStateChanged)
 	self.RequestAbilityRemote = self.Remotes:WaitForChild(RemoteNames.RequestRemnantAbility)
 	self:_createUI()
+
+	task.spawn(function()
+		self:_preloadRemnantAnimations()
+	end)
 
 	self.Remote.OnClientEvent:Connect(function(state)
 		self.State = state or self.State

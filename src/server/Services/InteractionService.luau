@@ -126,6 +126,7 @@ function InteractionService:StartInteraction(player)
 		Target = target.DisplayName,
 		Progress = target.Progress or 0,
 		Max = target.MaxProgress or 1,
+		ChargeRate = target.ChargeRate or 0,
 	})
 	
 	DebugLog:Log("Interaction", string.format("[InteractionService] %s started interacting with %s", player.Name, target.DisplayName))
@@ -352,6 +353,7 @@ function InteractionService:_updateInteraction(player, interaction)
 			Target = target.DisplayName,
 			Progress = math.clamp(target.Progress or 0, 0, target.MaxProgress or 1),
 			Max = target.MaxProgress or 1,
+			ChargeRate = target.ChargeRate or 0,
 		})
 
 		if completed then
@@ -378,6 +380,7 @@ function InteractionService:_updateInteraction(player, interaction)
 			Target = target.DisplayName,
 			Progress = math.clamp(target.Progress or 0, 0, target.MaxProgress or 1),
 			Max = target.MaxProgress or 1,
+			ChargeRate = target.ChargeRate or 0,
 		})
 
 		if completed then
@@ -433,6 +436,7 @@ function InteractionService:_updateInteraction(player, interaction)
 			Target = target.DisplayName,
 			Progress = math.clamp(target.Progress or 0, 0, target.MaxProgress or 1),
 			Max = target.MaxProgress or 1,
+			ChargeRate = target.ChargeRate or 0,
 		})
 
 		if completed then
@@ -481,6 +485,7 @@ function InteractionService:_updateInteraction(player, interaction)
 		Target = target.DisplayName,
 		Progress = target.Progress,
 		Max = target.MaxProgress or 1,
+		ChargeRate = target.ChargeRate or 0,
 	})
 	
 	if not progressed or target.IsComplete then

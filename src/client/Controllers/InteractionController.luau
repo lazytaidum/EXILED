@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 local RemoteNames = require(ReplicatedStorage.Shared.Constants.RemoteNames)
 local DebugLog = require(ReplicatedStorage.Shared.Utility.DebugLog)
@@ -17,6 +18,10 @@ end
 function InteractionController:Start()
 	self:_createUi()
 	self.UI.Root.Enabled = false
+	self.DisplayToken = 0
+	self.ActiveProgress = 0
+	self.ActiveMax = 1
+	self.ActiveChargeRate = 0
 
 	self.Remote.OnClientEvent:Connect(function(data)
 		self:HandleInteractionUpdate(data)
@@ -74,6 +79,7 @@ function InteractionController:_createUi()
 	barBackground.Size = UDim2.new(1, -32, 0, 6)
 	barBackground.BackgroundColor3 = Color3.fromRGB(48, 51, 60)
 	barBackground.BorderSizePixel = 0
+	barBackground.ClipsDescendants = true
 	barBackground.Parent = container
 
 	local barCorner = Instance.new("UICorner")
@@ -100,10 +106,46 @@ function InteractionController:_createUi()
 	}
 end
 
+function InteractionController:_setProgress(progress, maxProgress)
+	local safeMax = math.max(maxProgress or 1, 0.001)
+	local percent = math.clamp((progress or 0) / safeMax, 0, 1)
+	self.UI.Bar.Size = UDim2.new(percent, 0, 1, 0)
+end
+
+function InteractionController:_stopProgressClock()
+	if self.ProgressConnection then
+		self.ProgressConnection:Disconnect()
+		self.ProgressConnection = nil
+	end
+end
+
+function InteractionController:_startProgressClock(progress, maxProgress, chargeRate)
+	self:_stopProgressClock()
+
+	self.ActiveProgress = progress or 0
+	self.ActiveMax = math.max(maxProgress or 1, 0.001)
+	self.ActiveChargeRate = math.max(chargeRate or 0, 0)
+	self:_setProgress(self.ActiveProgress, self.ActiveMax)
+
+	if self.ActiveChargeRate <= 0 then
+		return
+	end
+
+	self.ProgressConnection = RunService.RenderStepped:Connect(function(deltaTime)
+		if not self.UI or not self.UI.Root.Enabled then
+			return
+		end
+
+		self.ActiveProgress = math.min(self.ActiveMax, self.ActiveProgress + self.ActiveChargeRate * deltaTime)
+		self:_setProgress(self.ActiveProgress, self.ActiveMax)
+	end)
+end
+
 function InteractionController:HandleInteractionUpdate(data)
 	DebugLog:Log("ClientInteraction", "[InteractionController] Received interaction state:", data.State)
 
 	if data.State == "Start" then
+		self.DisplayToken += 1
 		self.UI.Root.Enabled = true
 		self.UI.Label.Text = data.Target or "Interacting..."
 		local lowerLabel = string.lower(self.UI.Label.Text)
@@ -120,19 +162,32 @@ function InteractionController:HandleInteractionUpdate(data)
 		else
 			self.UI.SubLabel.Text = "Hold to continue"
 		end
-		self.UI.Bar.Size = UDim2.new(0, 0, 1, 0)
+		self:_startProgressClock(data.Progress or 0, data.Max or 1, data.ChargeRate or 0)
 	elseif data.State == "Update" then
 		local maxValue = data.Max or 1
 		local progressValue = data.Progress or 0
-		local percent = math.clamp(progressValue / maxValue, 0, 1)
-		self.UI.Bar.Size = UDim2.new(percent, 0, 1, 0)
+		self.ActiveProgress = progressValue
+		self.ActiveMax = math.max(maxValue, 0.001)
+		self.ActiveChargeRate = math.max(data.ChargeRate or self.ActiveChargeRate or 0, 0)
+		self:_setProgress(self.ActiveProgress, self.ActiveMax)
+
+		if self.ActiveChargeRate > 0 and not self.ProgressConnection then
+			self:_startProgressClock(self.ActiveProgress, self.ActiveMax, self.ActiveChargeRate)
+		end
 	elseif data.State == "Stop" then
+		self.DisplayToken += 1
+		self:_stopProgressClock()
 		self.UI.Root.Enabled = false
 	elseif data.State == "Complete" then
+		self.DisplayToken += 1
+		local token = self.DisplayToken
+		self:_stopProgressClock()
 		self.UI.SubLabel.Text = "Complete"
-		self.UI.Bar.Size = UDim2.new(1, 0, 1, 0)
+		self:_setProgress(data.Progress or data.Max or 1, data.Max or 1)
 		task.delay(0.3, function()
-			self.UI.Root.Enabled = false
+			if self.DisplayToken == token then
+				self.UI.Root.Enabled = false
+			end
 		end)
 	end
 end
